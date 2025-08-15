@@ -267,6 +267,11 @@ class IndexedDBStorage {
         }
     }
 
+    // Alias for clearAllData
+    async clearAllPapers() {
+        return await this.clearAllData();
+    }
+
     // Utility method to promisify IndexedDB requests
     promisifyRequest(request) {
         return new Promise((resolve, reject) => {

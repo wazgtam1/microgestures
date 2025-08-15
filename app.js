@@ -85,73 +85,99 @@ class LiteratureManager {
     }
     
     async loadData() {
-        // First try to load shared data from GitHub (if no local data exists)
-        const hasLocalData = await this.hasLocalData();
+        console.log('🔄 Starting loadData...');
         
-        if (!hasLocalData) {
-            console.log('No local data found, trying to load shared database from GitHub...');
-            try {
-                const sharedResult = await githubStorage.downloadPapersMetadata();
-                if (sharedResult.success && sharedResult.papers.length > 0) {
-                    this.papers = sharedResult.papers;
-                    this.filteredPapers = [...this.papers];
-                    console.log('Loaded', this.papers.length, 'papers from shared GitHub database');
-                    setTimeout(() => {
-                        this.showNotification(`Loaded ${this.papers.length} papers from shared database`, 'info');
-                    }, 500);
-                    return;
-                }
-            } catch (error) {
-                console.log('No shared database found or error loading:', error.message);
-            }
-        }
+        // Always prioritize local storage over shared GitHub database
+        // This ensures deletions are persistent
         
-        // Then try to load from IndexedDB
+        // First try to load from IndexedDB
         if (this.storage) {
             try {
+                console.log('📱 Checking IndexedDB...');
                 const papers = await this.storage.getAllPapers();
+                console.log('📱 IndexedDB result:', papers ? papers.length : 'null', 'papers');
+                
                 if (papers && papers.length > 0) {
                     this.papers = papers;
                     this.filteredPapers = [...this.papers];
-                    console.log('Loaded', this.papers.length, 'papers from IndexedDB');
+                    console.log('✅ Loaded', this.papers.length, 'papers from IndexedDB');
                     
-                    // Show notification for successful data loading
                     setTimeout(() => {
                         this.showNotification(`Loaded ${this.papers.length} papers from permanent storage`, 'success');
                     }, 500);
                     return;
                 }
+                // IMPORTANT: If IndexedDB is available but empty, respect that state
+                // This means the user has explicitly cleared their data
+                console.log('📱 IndexedDB is empty - treating as explicit empty state');
+                this.papers = [];
+                this.filteredPapers = [];
+                return;
             } catch (error) {
-                console.error('Failed to load from IndexedDB:', error);
+                console.error('❌ Failed to load from IndexedDB:', error);
             }
+        } else {
+            console.log('📱 IndexedDB not available, checking localStorage...');
         }
         
-        // Fallback to localStorage
+        // Try localStorage (only if IndexedDB is not available)
+        console.log('💾 Checking localStorage...');
         const savedPapers = localStorage.getItem('literaturePapers');
+        console.log('💾 localStorage result:', savedPapers ? 'data found' : 'empty');
+        
         if (savedPapers) {
             try {
                 const parsedPapers = JSON.parse(savedPapers);
-                if (Array.isArray(parsedPapers) && parsedPapers.length > 0) {
-                    this.papers = parsedPapers;
-                    this.filteredPapers = [...this.papers];
-                    console.log('Loaded', this.papers.length, 'papers from localStorage');
-                    
-                    // Show notification for successful data loading
-                    setTimeout(() => {
-                        this.showNotification(`Loaded ${this.papers.length} papers from temporary storage (考虑迁移到永久存储)`, 'warning');
-                    }, 500);
-                    return;
+                console.log('💾 Parsed papers:', Array.isArray(parsedPapers) ? parsedPapers.length : 'not array');
+                
+                if (Array.isArray(parsedPapers)) {
+                    if (parsedPapers.length > 0) {
+                        this.papers = parsedPapers;
+                        this.filteredPapers = [...this.papers];
+                        console.log('✅ Loaded', this.papers.length, 'papers from localStorage');
+                        
+                        setTimeout(() => {
+                            this.showNotification(`Loaded ${this.papers.length} papers from temporary storage (考虑迁移到永久存储)`, 'warning');
+                        }, 500);
+                        return;
+                    } else {
+                        // If localStorage exists but is empty, respect that
+                        console.log('💾 localStorage is empty array - treating as explicit empty state');
+                        this.papers = [];
+                        this.filteredPapers = [];
+                        return;
+                    }
                 }
             } catch (error) {
-                console.error('Failed to parse localStorage data:', error);
+                console.error('❌ Failed to parse localStorage data:', error);
                 this.showNotification('Failed to parse local storage data', 'warning');
             }
         }
         
-        // No data found
+        // Only load from GitHub if NEITHER IndexedDB NOR localStorage exist
+        // This should only happen on first visit to the site
+        console.log('🌐 No local storage found, trying to load shared database from GitHub...');
+        try {
+            const sharedResult = await githubStorage.downloadPapersMetadata();
+            console.log('🌐 GitHub result:', sharedResult);
+            
+            if (sharedResult.success && sharedResult.papers.length > 0) {
+                this.papers = sharedResult.papers;
+                this.filteredPapers = [...this.papers];
+                console.log('✅ Loaded', this.papers.length, 'papers from shared GitHub database');
+                setTimeout(() => {
+                    this.showNotification(`Loaded ${this.papers.length} papers from shared database`, 'info');
+                }, 500);
+                return;
+            }
+        } catch (error) {
+            console.log('❌ No shared database found or error loading:', error.message);
+        }
+        
+        // No data found anywhere
         this.papers = [];
         this.filteredPapers = [];
-        console.log('No saved data found, system ready for new uploads');
+        console.log('🆕 No saved data found, system ready for new uploads');
     }
     
     // Save data to persistent storage
@@ -159,11 +185,14 @@ class LiteratureManager {
         // First try to save to IndexedDB
         if (this.storage) {
             try {
+                // Clear existing data first, then save current papers
+                await this.storage.clearAllData();
+                
                 // Save each paper to IndexedDB
                 for (const paper of this.papers) {
                     await this.storage.savePaper(paper);
                 }
-                console.log('Data saved to IndexedDB (permanent storage)');
+                console.log(`Data saved to IndexedDB: ${this.papers.length} papers`);
                 return;
             } catch (error) {
                 console.error('Failed to save to IndexedDB, falling back to localStorage:', error);
@@ -181,7 +210,7 @@ class LiteratureManager {
             });
             
             localStorage.setItem('literaturePapers', JSON.stringify(papersToSave));
-            console.log('Data saved to localStorage (temporary storage)');
+            console.log(`Data saved to localStorage: ${papersToSave.length} papers`);
         } catch (error) {
             console.error('Failed to save data:', error);
             if (error.name === 'QuotaExceededError') {
@@ -650,8 +679,9 @@ class LiteratureManager {
             <div class="paper-card" onclick="literatureManager.showPaperDetails(${paper.id})">
                 <div class="paper-card-header">
                     <div class="paper-image-container">
-                        ${paper.thumbnail ? 
-                            `<img src="${paper.thumbnail}" alt="PDF Preview" class="paper-thumbnail" />` :
+                        ${paper.thumbnail && paper.thumbnail !== 'null' && paper.thumbnail !== '' ? 
+                            `<img src="${paper.thumbnail}" alt="PDF Preview" class="paper-thumbnail" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                             <div class="paper-icon" style="display: none;">${this.getPaperIcon(paper.researchArea)}</div>` :
                             `<div class="paper-icon">${this.getPaperIcon(paper.researchArea)}</div>`
                         }
                         <div class="image-overlay" onclick="event.stopPropagation(); literatureManager.showImageManager(${paper.id})">
@@ -833,8 +863,9 @@ class LiteratureManager {
         document.getElementById('paperDetails').innerHTML = `
             <div class="paper-details-layout">
                 <div class="paper-details-image">
-                    ${paper.thumbnail ? 
-                        `<img src="${paper.thumbnail}" alt="PDF Preview" class="paper-details-thumbnail" />` :
+                    ${paper.thumbnail && paper.thumbnail !== 'null' && paper.thumbnail !== '' ? 
+                        `<img src="${paper.thumbnail}" alt="PDF Preview" class="paper-details-thumbnail" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                         <div class="paper-details-icon" style="display: none;">${this.getPaperIcon(paper.researchArea)}</div>` :
                         `<div class="paper-details-icon">${this.getPaperIcon(paper.researchArea)}</div>`
                     }
                 </div>
@@ -979,7 +1010,7 @@ class LiteratureManager {
                         <div class="detail-label">Links</div>
                         <div class="detail-links">
                             ${paper.pdfUrl && paper.pdfUrl !== '#' ? 
-                                (paper.pdfUrl.startsWith('data:') ? 
+                                (paper.pdfUrl.startsWith('data:') || paper.pdfUrl.includes('cdn.jsdelivr.net') || paper.pdfUrl.includes('raw.githubusercontent.com') ? 
                                     `<button class="detail-link detail-link--primary" onclick="literatureManager.showPdfViewerAndCloseModal('${paper.pdfUrl}', '${paper.title}')">📄 View PDF Document (Built-in Viewer)</button>` :
                                     paper.pdfUrl.startsWith('blob:') ?
                                         `<span class="detail-link detail-link--disabled">⚠️ PDF document link expired</span>` :
@@ -1884,8 +1915,9 @@ class LiteratureManager {
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 
-                // Generate thumbnail from first page
+                // Generate thumbnail from first page - always generate regardless of storage type
                 const thumbnail = await this.generatePDFThumbnail(pdf);
+                console.log('Generated thumbnail for PDF:', thumbnail ? 'success' : 'failed');
                 
                 let fullText = '';
                 const maxPages = Math.min(pdf.numPages, 3); // Only parse first 3 pages
@@ -1925,8 +1957,8 @@ class LiteratureManager {
                     doi: extractedInfo.doi || '',
                     pdfUrl: pdfUrl, // Now can be GitHub URL or base64
                     websiteUrl: '#',
-                    thumbnail: thumbnail,
-                    originalThumbnail: thumbnail,
+                    thumbnail: thumbnail, // Always save thumbnail
+                    originalThumbnail: thumbnail, // Keep original for reset function
                     pdfFileSize: file.size,
                     isPersistentPDF: true,
                     githubFileInfo: githubFileInfo // Store GitHub metadata
@@ -2550,34 +2582,82 @@ class LiteratureManager {
                     }
                 };
                 
-                // For jsDelivr URLs, don't use CORS mode to avoid issues
+                // Try multiple URL strategies for GitHub-hosted PDFs
+                const urlStrategies = [];
+                
                 if (pdfUrl.includes('cdn.jsdelivr.net')) {
-                    console.log('Using jsDelivr CDN URL for PDF');
-                    fetchOptions.mode = 'cors';
-                } else {
-                    fetchOptions.mode = 'cors';
-                }
-                
-                const response = await fetch(fetchUrl, fetchOptions);
-                
-                if (!response.ok) {
-                    // If jsDelivr fails, try the raw GitHub URL as fallback
-                    if (pdfUrl.includes('cdn.jsdelivr.net')) {
-                        console.log('jsDelivr failed, trying raw GitHub URL...');
-                        const rawUrl = pdfUrl.replace('https://cdn.jsdelivr.net/gh/', 'https://raw.githubusercontent.com/').replace('@main/', '/main/');
-                        const fallbackResponse = await fetch(rawUrl, fetchOptions);
-                        if (fallbackResponse.ok) {
-                            pdfData = await fallbackResponse.arrayBuffer();
-                            console.log('PDF fetched from fallback URL, size:', pdfData.byteLength);
-                        } else {
-                            throw new Error(`Both CDN and raw GitHub failed! status: ${response.status}`);
-                        }
-                    } else {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                    // Primary: jsDelivr CDN
+                    urlStrategies.push({
+                        url: pdfUrl,
+                        name: 'jsDelivr CDN'
+                    });
+                    
+                    // Backup: Raw GitHub URL
+                    const rawUrl = pdfUrl.replace('https://cdn.jsdelivr.net/gh/', 'https://raw.githubusercontent.com/').replace('@main/', '/main/');
+                    urlStrategies.push({
+                        url: rawUrl,
+                        name: 'Raw GitHub'
+                    });
+                    
+                    // Alternative: GitHub API content endpoint
+                    if (this.papers && this.papers.length > 0) {
+                        const githubApiUrl = pdfUrl.replace('https://cdn.jsdelivr.net/gh/', 'https://api.github.com/repos/').replace('@main/', '/contents/');
+                        urlStrategies.push({
+                            url: githubApiUrl,
+                            name: 'GitHub API',
+                            isApi: true
+                        });
                     }
                 } else {
-                    pdfData = await response.arrayBuffer();
-                    console.log('PDF fetched, size:', pdfData.byteLength);
+                    // For non-jsDelivr URLs, try as-is
+                    urlStrategies.push({
+                        url: pdfUrl,
+                        name: 'Direct URL'
+                    });
+                }
+                
+                let pdfData = null;
+                let successStrategy = null;
+                
+                for (const strategy of urlStrategies) {
+                    try {
+                        console.log(`Trying ${strategy.name}: ${strategy.url.substring(0, 80)}...`);
+                        
+                        const options = { ...fetchOptions };
+                        if (strategy.isApi && githubStorage && githubStorage.getToken()) {
+                            options.headers['Authorization'] = `token ${githubStorage.getToken()}`;
+                        }
+                        
+                        const response = await fetch(strategy.url, options);
+                        
+                        if (response.ok) {
+                            if (strategy.isApi) {
+                                // GitHub API returns base64 content
+                                const apiData = await response.json();
+                                const base64Content = apiData.content.replace(/\s/g, '');
+                                const binaryString = atob(base64Content);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) {
+                                    bytes[i] = binaryString.charCodeAt(i);
+                                }
+                                pdfData = bytes.buffer;
+                            } else {
+                                pdfData = await response.arrayBuffer();
+                            }
+                            
+                            console.log(`✅ Success with ${strategy.name}, PDF size: ${pdfData.byteLength} bytes`);
+                            successStrategy = strategy;
+                            break;
+                        } else {
+                            console.log(`❌ ${strategy.name} failed: ${response.status} ${response.statusText}`);
+                        }
+                    } catch (error) {
+                        console.log(`❌ ${strategy.name} error:`, error.message);
+                    }
+                }
+                
+                if (!pdfData) {
+                    throw new Error('All URL strategies failed. PDF may be unavailable or access restricted.');
                 }
             }
             
@@ -2883,22 +2963,59 @@ class LiteratureManager {
         }
 
         // Confirm deletion
-        const confirmMessage = `Are you sure you want to delete "${paper.title}"?\n\nThis action cannot be undone.`;
+        const confirmMessage = `Are you sure you want to delete "${paper.title}"?\n\nThis action will permanently remove the paper from:\n• Local storage\n• Shared database on GitHub\n• PDF files on GitHub\n\nThis action cannot be undone.`;
         if (!confirm(confirmMessage)) {
             return;
         }
 
         try {
-            // Remove from papers array
+            this.showNotification('Deleting paper...', 'info');
+            
+            // 1. Remove from papers array
             this.papers = this.papers.filter(p => p.id !== paperId);
             
-            // Save updated data
+            // 2. Remove from IndexedDB individually
+            if (this.storage) {
+                try {
+                    await this.storage.deletePaper(paperId);
+                    console.log('Deleted from IndexedDB');
+                } catch (error) {
+                    console.warn('Failed to delete from IndexedDB:', error);
+                }
+            }
+            
+            // 3. Delete PDF file from GitHub if it exists
+            if (paper.githubFileInfo && githubStorage.getToken()) {
+                try {
+                    const deleteResult = await githubStorage.deletePDF(paper.githubFileInfo.filename, paper.githubFileInfo.sha);
+                    if (deleteResult) {
+                        console.log('PDF file deleted from GitHub');
+                    } else {
+                        console.warn('Failed to delete PDF file from GitHub');
+                    }
+                } catch (error) {
+                    console.warn('Error deleting PDF from GitHub:', error);
+                }
+            }
+            
+            // 4. Save updated data to local storage
             await this.saveData();
             
-            // Auto-sync to GitHub if configured
-            await this.autoSyncToGitHub();
+            // 5. Update shared database on GitHub (this removes the paper from shared database)
+            if (githubStorage.getToken()) {
+                try {
+                    const syncResult = await githubStorage.uploadPapersMetadata(this.papers);
+                    if (syncResult.success) {
+                        console.log('Shared database updated - paper removed');
+                    } else {
+                        console.warn('Failed to update shared database:', syncResult.error);
+                    }
+                } catch (error) {
+                    console.warn('Error updating shared database:', error);
+                }
+            }
             
-            // Update UI
+            // 6. Update UI
             this.applyFilters();
             this.initializeFilters();
             this.renderPapersGrid();
@@ -2907,10 +3024,10 @@ class LiteratureManager {
             // Close modal
             this.hidePaperModal();
             
-            this.showNotification('✅ Paper deleted successfully', 'success');
+            this.showNotification('✅ Paper completely deleted from all locations', 'success');
         } catch (error) {
             console.error('Error deleting paper:', error);
-            this.showNotification('❌ Failed to delete paper', 'error');
+            this.showNotification('❌ Failed to delete paper: ' + error.message, 'error');
         }
     }
 
@@ -2922,13 +3039,13 @@ class LiteratureManager {
         }
 
         // Confirm deletion
-        const confirmMessage = `Are you sure you want to delete ALL ${this.papers.length} papers?\n\nThis action cannot be undone and will remove all your papers from the database.`;
+        const confirmMessage = `Are you sure you want to delete ALL ${this.papers.length} papers?\n\nThis action will permanently remove ALL papers from:\n• Local storage (IndexedDB & localStorage)\n• Shared database on GitHub\n• ALL PDF files on GitHub\n\nThis action cannot be undone and will completely clear your entire database.`;
         if (!confirm(confirmMessage)) {
             return;
         }
 
         // Double confirmation for destructive action
-        const doubleConfirm = prompt(`To confirm, please type "DELETE ALL" (case sensitive):`);
+        const doubleConfirm = prompt(`To confirm total deletion, please type "DELETE ALL" (case sensitive):`);
         if (doubleConfirm !== "DELETE ALL") {
             this.showNotification('Deletion cancelled', 'info');
             return;
@@ -2936,26 +3053,111 @@ class LiteratureManager {
 
         try {
             const deletedCount = this.papers.length;
+            this.showNotification('Deleting all papers and files...', 'info');
             
-            // Clear papers array
+            // 1. Delete all PDF files from GitHub if configured
+            if (githubStorage.getToken()) {
+                const githubPapers = this.papers.filter(paper => paper.githubFileInfo);
+                if (githubPapers.length > 0) {
+                    this.showNotification(`Deleting ${githubPapers.length} PDF files from GitHub...`, 'info');
+                    
+                    for (const paper of githubPapers) {
+                        try {
+                            await githubStorage.deletePDF(paper.githubFileInfo.filename, paper.githubFileInfo.sha);
+                            console.log(`PDF deleted from GitHub: ${paper.githubFileInfo.filename}`);
+                        } catch (error) {
+                            console.warn(`Error deleting PDF ${paper.githubFileInfo.filename}:`, error);
+                        }
+                    }
+                }
+            }
+            
+            // 2. Clear papers array FIRST
             this.papers = [];
             
-            // Save updated data
+            // 3. Clear all storage types using the updated saveData method
+            // This will clear IndexedDB and save empty array
             await this.saveData();
             
-            // Auto-sync to GitHub if configured
-            await this.autoSyncToGitHub();
+            // 4. Explicitly clear localStorage as well
+            localStorage.removeItem('literaturePapers');
             
-            // Update UI
+            // 5. Update GitHub shared database to empty state
+            if (githubStorage.getToken()) {
+                try {
+                    await githubStorage.uploadPapersMetadata([]);
+                    console.log('GitHub shared database cleared');
+                } catch (error) {
+                    console.warn('Error clearing GitHub shared database:', error);
+                }
+            }
+            
+            // 6. Update UI
             this.applyFilters();
             this.initializeFilters();
             this.renderPapersGrid();
             this.updatePagination();
             
-            this.showNotification(`✅ All ${deletedCount} papers deleted successfully`, 'success');
+            this.showNotification(`✅ All ${deletedCount} papers completely deleted from all locations`, 'success');
         } catch (error) {
             console.error('Error deleting all papers:', error);
-            this.showNotification('❌ Failed to delete papers', 'error');
+            this.showNotification('❌ Failed to delete all papers: ' + error.message, 'error');
+        }
+    }
+
+    // Debug storage method
+    async debugStorage() {
+        console.log('🔍 === DEBUG STORAGE STATUS ===');
+        
+        let debugInfo = '🔍 Storage Debug Info:\n\n';
+        
+        // Check current papers in memory
+        debugInfo += `📝 Current papers in memory: ${this.papers.length}\n`;
+        
+        // Check localStorage
+        const localStorage_data = localStorage.getItem('literaturePapers');
+        if (localStorage_data) {
+            try {
+                const parsed = JSON.parse(localStorage_data);
+                debugInfo += `💾 localStorage: ${Array.isArray(parsed) ? parsed.length : 'invalid'} papers\n`;
+            } catch (error) {
+                debugInfo += `💾 localStorage: corrupted data\n`;
+            }
+        } else {
+            debugInfo += `💾 localStorage: empty\n`;
+        }
+        
+        // Check IndexedDB
+        if (this.storage) {
+            try {
+                const papers = await this.storage.getAllPapers();
+                debugInfo += `📱 IndexedDB: ${papers ? papers.length : 'null'} papers\n`;
+            } catch (error) {
+                debugInfo += `📱 IndexedDB: error - ${error.message}\n`;
+            }
+        } else {
+            debugInfo += `📱 IndexedDB: not available\n`;
+        }
+        
+        // Check GitHub token
+        const token = githubStorage.getToken();
+        debugInfo += `🌐 GitHub token: ${token ? 'configured' : 'not configured'}\n`;
+        
+        if (token) {
+            try {
+                const isValid = await githubStorage.validateToken();
+                debugInfo += `🌐 GitHub connection: ${isValid ? 'valid' : 'invalid'}\n`;
+            } catch (error) {
+                debugInfo += `🌐 GitHub connection: error\n`;
+            }
+        }
+        
+        console.log(debugInfo);
+        alert(debugInfo);
+        
+        // Also log paper IDs for debugging
+        if (this.papers.length > 0) {
+            console.log('Paper IDs:', this.papers.map(p => p.id));
         }
     }
 }
