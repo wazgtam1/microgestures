@@ -87,6 +87,9 @@ class LiteratureManager {
     async loadData() {
         console.log('🔄 Starting loadData...');
         
+        // Check if user has explicitly deleted all data
+        const userDeletedData = localStorage.getItem('user_deleted_all_data');
+        
         // Always prioritize local storage over shared GitHub database
         // This ensures deletions are persistent
         
@@ -107,12 +110,17 @@ class LiteratureManager {
                     }, 500);
                     return;
                 }
-                // IMPORTANT: If IndexedDB is available but empty, respect that state
-                // This means the user has explicitly cleared their data
-                console.log('📱 IndexedDB is empty - treating as explicit empty state');
-                this.papers = [];
-                this.filteredPapers = [];
-                return;
+                
+                // If user explicitly deleted data, respect that and don't reload from GitHub
+                if (userDeletedData === 'true') {
+                    console.log('📱 IndexedDB empty due to user deletion - staying empty');
+                    this.papers = [];
+                    this.filteredPapers = [];
+                    return;
+                }
+                
+                // If IndexedDB is empty but user hasn't deleted data, could be new user
+                console.log('📱 IndexedDB empty but no deletion flag - checking localStorage first');
             } catch (error) {
                 console.error('❌ Failed to load from IndexedDB:', error);
             }
@@ -120,7 +128,7 @@ class LiteratureManager {
             console.log('📱 IndexedDB not available, checking localStorage...');
         }
         
-        // Try localStorage (only if IndexedDB is not available)
+        // Try localStorage (only if IndexedDB is not available or empty without deletion flag)
         console.log('💾 Checking localStorage...');
         const savedPapers = localStorage.getItem('literaturePapers');
         console.log('💾 localStorage result:', savedPapers ? 'data found' : 'empty');
@@ -140,9 +148,9 @@ class LiteratureManager {
                             this.showNotification(`Loaded ${this.papers.length} papers from temporary storage (考虑迁移到永久存储)`, 'warning');
                         }, 500);
                         return;
-                    } else {
-                        // If localStorage exists but is empty, respect that
-                        console.log('💾 localStorage is empty array - treating as explicit empty state');
+                    } else if (userDeletedData === 'true') {
+                        // If localStorage exists but is empty and user deleted data, respect that
+                        console.log('💾 localStorage empty due to user deletion - staying empty');
                         this.papers = [];
                         this.filteredPapers = [];
                         return;
@@ -154,9 +162,16 @@ class LiteratureManager {
             }
         }
         
-        // Only load from GitHub if NEITHER IndexedDB NOR localStorage exist
-        // This should only happen on first visit to the site
-        console.log('🌐 No local storage found, trying to load shared database from GitHub...');
+        // If user deleted data, don't reload from GitHub
+        if (userDeletedData === 'true') {
+            console.log('🚫 User deleted data - not loading from GitHub');
+            this.papers = [];
+            this.filteredPapers = [];
+            return;
+        }
+        
+        // Load from GitHub if no local storage exists or if it's a new user
+        console.log('🌐 No local data found, trying to load shared database from GitHub...');
         try {
             const sharedResult = await githubStorage.downloadPapersMetadata();
             console.log('🌐 GitHub result:', sharedResult);
@@ -3075,14 +3090,17 @@ class LiteratureManager {
             // 2. Clear papers array FIRST
             this.papers = [];
             
-            // 3. Clear all storage types using the updated saveData method
+            // 3. Set deletion flag to prevent reloading from GitHub
+            localStorage.setItem('user_deleted_all_data', 'true');
+            
+            // 4. Clear all storage types using the updated saveData method
             // This will clear IndexedDB and save empty array
             await this.saveData();
             
-            // 4. Explicitly clear localStorage as well
+            // 5. Explicitly clear localStorage (except the deletion flag)
             localStorage.removeItem('literaturePapers');
             
-            // 5. Update GitHub shared database to empty state
+            // 6. Update GitHub shared database to empty state
             if (githubStorage.getToken()) {
                 try {
                     await githubStorage.uploadPapersMetadata([]);
@@ -3092,7 +3110,7 @@ class LiteratureManager {
                 }
             }
             
-            // 6. Update UI
+            // 7. Update UI
             this.applyFilters();
             this.initializeFilters();
             this.renderPapersGrid();
