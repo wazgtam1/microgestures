@@ -3570,3 +3570,24 @@ select.form-control {
   color: var(--color-text);
   font-weight: 500;
 }
+
+/* Delete Button Styles */
+.btn--danger {
+  background-color: #dc2626;
+  color: white;
+  border: 1px solid #dc2626;
+}
+
+.btn--danger:hover {
+  background-color: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.btn--danger:active {
+  background-color: #991b1b;
+  border-color: #991b1b;
+}
+
+.delete-btn {
+  margin-right: var(--space-2);
+}

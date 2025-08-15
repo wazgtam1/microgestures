@@ -293,6 +293,10 @@ class LiteratureManager {
             this.syncToGitHub();
         });
         
+        document.getElementById('deleteAllPapersBtn').addEventListener('click', () => {
+            this.deleteAllPapers();
+        });
+        
         // Paper details modal
         document.getElementById('closePaper').addEventListener('click', () => {
             this.hidePaperModal();
@@ -837,7 +841,8 @@ class LiteratureManager {
                 <div class="paper-details-content">
                     <div class="paper-details-actions">
                         ${!isEditMode ? 
-                            `<button class="btn btn--secondary btn--sm edit-btn" onclick="literatureManager.toggleEditMode()">✏️ Edit</button>` :
+                            `<button class="btn btn--danger btn--sm delete-btn" onclick="literatureManager.deletePaper(${paper.id})" title="Delete Paper">🗑️ Delete</button>
+                             <button class="btn btn--secondary btn--sm edit-btn" onclick="literatureManager.toggleEditMode()">✏️ Edit</button>` :
                             `<button class="btn btn--primary btn--sm save-btn" onclick="literatureManager.savePaperDetails()">💾 Save</button>
                              <button class="btn btn--outline btn--sm cancel-btn" onclick="literatureManager.cancelEditMode()">❌ Cancel</button>`
                         }
@@ -2866,6 +2871,91 @@ class LiteratureManager {
             }
         } catch (error) {
             this.showNotification(`❌ Sync error: ${error.message}`, 'error');
+        }
+    }
+
+    // Delete a single paper
+    async deletePaper(paperId) {
+        const paper = this.papers.find(p => p.id === paperId);
+        if (!paper) {
+            this.showNotification('Paper not found', 'error');
+            return;
+        }
+
+        // Confirm deletion
+        const confirmMessage = `Are you sure you want to delete "${paper.title}"?\n\nThis action cannot be undone.`;
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        try {
+            // Remove from papers array
+            this.papers = this.papers.filter(p => p.id !== paperId);
+            
+            // Save updated data
+            await this.saveData();
+            
+            // Auto-sync to GitHub if configured
+            await this.autoSyncToGitHub();
+            
+            // Update UI
+            this.applyFilters();
+            this.initializeFilters();
+            this.renderPapersGrid();
+            this.updatePagination();
+            
+            // Close modal
+            this.hidePaperModal();
+            
+            this.showNotification('✅ Paper deleted successfully', 'success');
+        } catch (error) {
+            console.error('Error deleting paper:', error);
+            this.showNotification('❌ Failed to delete paper', 'error');
+        }
+    }
+
+    // Delete all papers
+    async deleteAllPapers() {
+        if (this.papers.length === 0) {
+            this.showNotification('No papers to delete', 'info');
+            return;
+        }
+
+        // Confirm deletion
+        const confirmMessage = `Are you sure you want to delete ALL ${this.papers.length} papers?\n\nThis action cannot be undone and will remove all your papers from the database.`;
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        // Double confirmation for destructive action
+        const doubleConfirm = prompt(`To confirm, please type "DELETE ALL" (case sensitive):`);
+        if (doubleConfirm !== "DELETE ALL") {
+            this.showNotification('Deletion cancelled', 'info');
+            return;
+        }
+
+        try {
+            const deletedCount = this.papers.length;
+            
+            // Clear papers array
+            this.papers = [];
+            
+            // Save updated data
+            await this.saveData();
+            
+            // Auto-sync to GitHub if configured
+            await this.autoSyncToGitHub();
+            
+            // Update UI
+            this.applyFilters();
+            this.initializeFilters();
+            this.renderPapersGrid();
+            this.updatePagination();
+            
+            this.showNotification(`✅ All ${deletedCount} papers deleted successfully`, 'success');
+        } catch (error) {
+            console.error('Error deleting all papers:', error);
+            this.showNotification('❌ Failed to delete papers', 'error');
         }
     }
 }
