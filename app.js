@@ -2478,21 +2478,46 @@ class LiteratureManager {
             } else {
                 // For GitHub URLs and other URL types, fetch with proper headers
                 console.log('Fetching PDF from URL...');
-                const response = await fetch(pdfUrl, {
+                
+                // Special handling for jsDelivr CDN URLs
+                let fetchUrl = pdfUrl;
+                let fetchOptions = {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/pdf',
                         'Cache-Control': 'no-cache'
-                    },
-                    mode: 'cors'
-                });
+                    }
+                };
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                // For jsDelivr URLs, don't use CORS mode to avoid issues
+                if (pdfUrl.includes('cdn.jsdelivr.net')) {
+                    console.log('Using jsDelivr CDN URL for PDF');
+                    fetchOptions.mode = 'cors';
+                } else {
+                    fetchOptions.mode = 'cors';
                 }
                 
-                pdfData = await response.arrayBuffer();
-                console.log('PDF fetched, size:', pdfData.byteLength);
+                const response = await fetch(fetchUrl, fetchOptions);
+                
+                if (!response.ok) {
+                    // If jsDelivr fails, try the raw GitHub URL as fallback
+                    if (pdfUrl.includes('cdn.jsdelivr.net')) {
+                        console.log('jsDelivr failed, trying raw GitHub URL...');
+                        const rawUrl = pdfUrl.replace('https://cdn.jsdelivr.net/gh/', 'https://raw.githubusercontent.com/').replace('@main/', '/main/');
+                        const fallbackResponse = await fetch(rawUrl, fetchOptions);
+                        if (fallbackResponse.ok) {
+                            pdfData = await fallbackResponse.arrayBuffer();
+                            console.log('PDF fetched from fallback URL, size:', pdfData.byteLength);
+                        } else {
+                            throw new Error(`Both CDN and raw GitHub failed! status: ${response.status}`);
+                        }
+                    } else {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                } else {
+                    pdfData = await response.arrayBuffer();
+                    console.log('PDF fetched, size:', pdfData.byteLength);
+                }
             }
             
             // Load PDF document

@@ -61,12 +61,13 @@ class GitHubStorage {
 
             const result = await response.json();
             
-            // Return the raw URL for accessing the file
-            const rawUrl = `${this.baseRawUrl}/${this.owner}/${this.repo}/${this.branch}/${filename}`;
+            // Return jsDelivr CDN URL instead of raw GitHub URL for better browser compatibility
+            const jsdelivrUrl = `https://cdn.jsdelivr.net/gh/${this.owner}/${this.repo}@${this.branch}/${filename}`;
             
             return {
                 success: true,
-                url: rawUrl,
+                url: jsdelivrUrl, // Use jsDelivr CDN URL
+                rawUrl: `${this.baseRawUrl}/${this.owner}/${this.repo}/${this.branch}/${filename}`, // Keep raw URL as backup
                 sha: result.content.sha,
                 filename: filename,
                 size: file.size
