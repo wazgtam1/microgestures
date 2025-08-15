@@ -56,8 +56,57 @@ class LiteratureManager {
         this.applyFilters();
     }
     
+    // Check if there's any local data
+    async hasLocalData() {
+        // Check IndexedDB
+        if (this.storage) {
+            try {
+                const papers = await this.storage.getAllPapers();
+                if (papers && papers.length > 0) {
+                    return true;
+                }
+            } catch (error) {
+                console.log('Error checking IndexedDB:', error);
+            }
+        }
+        
+        // Check localStorage
+        const savedPapers = localStorage.getItem('literaturePapers');
+        if (savedPapers) {
+            try {
+                const parsedPapers = JSON.parse(savedPapers);
+                return Array.isArray(parsedPapers) && parsedPapers.length > 0;
+            } catch (error) {
+                console.log('Error parsing localStorage:', error);
+            }
+        }
+        
+        return false;
+    }
+    
     async loadData() {
-        // First try to load from IndexedDB
+        // First try to load shared data from GitHub (if no local data exists)
+        const hasLocalData = await this.hasLocalData();
+        
+        if (!hasLocalData) {
+            console.log('No local data found, trying to load shared database from GitHub...');
+            try {
+                const sharedResult = await githubStorage.downloadPapersMetadata();
+                if (sharedResult.success && sharedResult.papers.length > 0) {
+                    this.papers = sharedResult.papers;
+                    this.filteredPapers = [...this.papers];
+                    console.log('Loaded', this.papers.length, 'papers from shared GitHub database');
+                    setTimeout(() => {
+                        this.showNotification(`Loaded ${this.papers.length} papers from shared database`, 'info');
+                    }, 500);
+                    return;
+                }
+            } catch (error) {
+                console.log('No shared database found or error loading:', error.message);
+            }
+        }
+        
+        // Then try to load from IndexedDB
         if (this.storage) {
             try {
                 const papers = await this.storage.getAllPapers();
@@ -238,6 +287,10 @@ class LiteratureManager {
         
         document.getElementById('saveGithubSettings').addEventListener('click', () => {
             this.saveGithubSettings();
+        });
+        
+        document.getElementById('syncToGithubBtn').addEventListener('click', () => {
+            this.syncToGitHub();
         });
         
         // Paper details modal
@@ -2168,6 +2221,9 @@ class LiteratureManager {
         await this.saveData(); // Save to persistent storage
         console.log('Data saved to storage');
         
+        // Auto-sync to GitHub if configured
+        await this.autoSyncToGitHub();
+        
         this.applyFilters();
         console.log('Filters applied');
         
@@ -2759,6 +2815,57 @@ class LiteratureManager {
         } catch (error) {
             statusElement.textContent = 'Connection error';
             statusElement.style.color = '#dc2626';
+        }
+    }
+
+    // Auto-sync papers to GitHub if configured
+    async autoSyncToGitHub() {
+        try {
+            const token = githubStorage.getToken();
+            if (!token) {
+                return; // No GitHub configured, skip sync
+            }
+
+            const isValid = await githubStorage.validateToken();
+            if (!isValid) {
+                return; // Invalid token, skip sync
+            }
+
+            console.log('Auto-syncing papers to GitHub...');
+            const result = await githubStorage.uploadPapersMetadata(this.papers);
+            
+            if (result.success) {
+                console.log('✅ Papers synced to GitHub successfully');
+                setTimeout(() => {
+                    this.showNotification('📤 Papers synced to GitHub for sharing', 'success');
+                }, 1000);
+            } else {
+                console.warn('⚠️ GitHub sync failed:', result.error);
+            }
+        } catch (error) {
+            console.warn('⚠️ Auto-sync error:', error.message);
+        }
+    }
+
+    // Manual sync button for GitHub settings
+    async syncToGitHub() {
+        try {
+            const token = githubStorage.getToken();
+            if (!token) {
+                this.showNotification('Please configure GitHub storage first', 'error');
+                return;
+            }
+
+            this.showNotification('Syncing papers to GitHub...', 'info');
+            const result = await githubStorage.uploadPapersMetadata(this.papers);
+            
+            if (result.success) {
+                this.showNotification(`✅ ${result.message}`, 'success');
+            } else {
+                this.showNotification(`❌ Sync failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showNotification(`❌ Sync error: ${error.message}`, 'error');
         }
     }
 }

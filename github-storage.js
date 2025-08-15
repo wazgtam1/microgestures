@@ -82,6 +82,124 @@ class GitHubStorage {
         }
     }
 
+    // Upload papers metadata to GitHub for sharing
+    async uploadPapersMetadata(papers) {
+        try {
+            if (!this.getToken()) {
+                throw new Error('GitHub token not configured');
+            }
+
+            const filename = 'papers-database.json';
+            
+            // Prepare metadata (exclude large binary data)
+            const metadata = papers.map(paper => ({
+                ...paper,
+                // Keep PDF URL but remove large base64 data if present
+                pdfUrl: paper.pdfUrl && paper.pdfUrl.startsWith('data:') ? 
+                    '[LOCAL_PDF_DATA]' : paper.pdfUrl,
+                // Remove large thumbnail data for sharing
+                thumbnail: paper.thumbnail && paper.thumbnail.length > 1000 ? 
+                    '[THUMBNAIL_DATA]' : paper.thumbnail,
+                originalThumbnail: paper.originalThumbnail && paper.originalThumbnail.length > 1000 ? 
+                    '[THUMBNAIL_DATA]' : paper.originalThumbnail
+            }));
+
+            const content = btoa(unescape(encodeURIComponent(JSON.stringify(metadata, null, 2))));
+
+            // Check if file exists first
+            let sha = null;
+            try {
+                const checkUrl = `${this.baseApiUrl}/repos/${this.owner}/${this.repo}/contents/${filename}`;
+                const checkResponse = await fetch(checkUrl, {
+                    headers: {
+                        'Authorization': `token ${this.getToken()}`
+                    }
+                });
+                if (checkResponse.ok) {
+                    const existing = await checkResponse.json();
+                    sha = existing.sha;
+                }
+            } catch (e) {
+                // File doesn't exist, that's ok
+            }
+
+            // Upload metadata
+            const uploadUrl = `${this.baseApiUrl}/repos/${this.owner}/${this.repo}/contents/${filename}`;
+            const body = {
+                message: `Update papers database: ${papers.length} papers`,
+                content: content,
+                branch: this.branch
+            };
+            
+            if (sha) {
+                body.sha = sha; // Required for updating existing file
+            }
+            
+            const response = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${this.getToken()}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(`Metadata upload failed: ${error.message}`);
+            }
+
+            return {
+                success: true,
+                message: `Successfully synced ${papers.length} papers to GitHub`
+            };
+
+        } catch (error) {
+            console.error('Metadata upload error:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Download papers metadata from GitHub for sharing
+    async downloadPapersMetadata() {
+        try {
+            const filename = 'papers-database.json';
+            const jsdelivrUrl = `https://cdn.jsdelivr.net/gh/${this.owner}/${this.repo}@${this.branch}/${filename}`;
+            
+            const response = await fetch(jsdelivrUrl);
+            
+            if (!response.ok) {
+                if (response.status === 404) {
+                    return {
+                        success: true,
+                        papers: [], // No shared database yet
+                        message: 'No shared database found'
+                    };
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const papers = await response.json();
+            
+            return {
+                success: true,
+                papers: papers,
+                message: `Loaded ${papers.length} papers from shared database`
+            };
+
+        } catch (error) {
+            console.error('Metadata download error:', error);
+            return {
+                success: false,
+                error: error.message,
+                papers: []
+            };
+        }
+    }
+
     // Convert file to base64
     fileToBase64(file) {
         return new Promise((resolve, reject) => {
