@@ -97,11 +97,9 @@ class GitHubStorage {
                 // Keep PDF URL but remove large base64 data if present
                 pdfUrl: paper.pdfUrl && paper.pdfUrl.startsWith('data:') ? 
                     '[LOCAL_PDF_DATA]' : paper.pdfUrl,
-                // Remove large thumbnail data for sharing
-                thumbnail: paper.thumbnail && paper.thumbnail.length > 1000 ? 
-                    '[THUMBNAIL_DATA]' : paper.thumbnail,
-                originalThumbnail: paper.originalThumbnail && paper.originalThumbnail.length > 1000 ? 
-                    '[THUMBNAIL_DATA]' : paper.originalThumbnail
+                // Keep thumbnails for sharing (they're important for UX)
+                thumbnail: paper.thumbnail,
+                originalThumbnail: paper.originalThumbnail
             }));
 
             const content = btoa(unescape(encodeURIComponent(JSON.stringify(metadata, null, 2))));
