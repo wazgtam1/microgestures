@@ -223,6 +223,23 @@ class LiteratureManager {
             this.showUploadModal();
         });
         
+        // GitHub Settings functionality
+        document.getElementById('githubSettingsBtn').addEventListener('click', () => {
+            this.showGithubSettingsModal();
+        });
+        
+        document.getElementById('closeGithubSettings').addEventListener('click', () => {
+            this.hideGithubSettingsModal();
+        });
+        
+        document.getElementById('testGithubConnection').addEventListener('click', () => {
+            this.testGithubConnection();
+        });
+        
+        document.getElementById('saveGithubSettings').addEventListener('click', () => {
+            this.saveGithubSettings();
+        });
+        
         // Paper details modal
         document.getElementById('closePaper').addEventListener('click', () => {
             this.hidePaperModal();
@@ -1773,8 +1790,34 @@ class LiteratureManager {
     
     async parsePDF(file, selectedCategory = 'auto') {
         try {
-            // Convert PDF file to base64 for persistent storage
-            const pdfBase64 = await this.convertFileToBase64(file);
+            // Check if GitHub storage is configured
+            const useGithubStorage = githubStorage.getToken() && await githubStorage.validateToken();
+            
+            let pdfUrl;
+            let githubFileInfo = null;
+            
+            if (useGithubStorage) {
+                // Upload to GitHub
+                this.showNotification('Uploading PDF to GitHub...', 'info');
+                const uploadResult = await githubStorage.uploadPDF(file, { title: file.name });
+                
+                if (uploadResult.success) {
+                    pdfUrl = uploadResult.url;
+                    githubFileInfo = {
+                        sha: uploadResult.sha,
+                        filename: uploadResult.filename,
+                        storedInGithub: true
+                    };
+                    this.showNotification('✅ PDF uploaded to GitHub successfully!', 'success');
+                } else {
+                    this.showNotification('❌ GitHub upload failed, using local storage', 'warning');
+                    // Fallback to base64 storage
+                    pdfUrl = await this.convertFileToBase64(file);
+                }
+            } else {
+                // Use local base64 storage
+                pdfUrl = await this.convertFileToBase64(file);
+            }
             
             // Initialize PDF.js
             if (typeof pdfjsLib !== 'undefined') {
@@ -1822,12 +1865,13 @@ class LiteratureManager {
                     downloads: 0,
                     abstract: extractedInfo.abstract || fullText.substring(0, 300) + '...',
                     doi: extractedInfo.doi || '',
-                    pdfUrl: pdfBase64, // Store base64 instead of blob URL
+                    pdfUrl: pdfUrl, // Now can be GitHub URL or base64
                     websiteUrl: '#',
                     thumbnail: thumbnail,
                     originalThumbnail: thumbnail,
-                    pdfFileSize: file.size, // Store file size for reference
-                    isPersistentPDF: true // Flag to indicate this PDF will persist
+                    pdfFileSize: file.size,
+                    isPersistentPDF: true,
+                    githubFileInfo: githubFileInfo // Store GitHub metadata
                 };
             } else {
                 // Fallback to basic parsing
@@ -1848,11 +1892,12 @@ class LiteratureManager {
                     downloads: 0,
                     abstract: `Paper parsed from PDF file "${file.name}", please manually edit relevant information.`,
                     doi: '',
-                    pdfUrl: pdfBase64, // Use base64 for fallback too
+                    pdfUrl: pdfUrl, // Now can be GitHub URL or base64
                     websiteUrl: '#',
                     thumbnail: null,
                     pdfFileSize: file.size,
-                    isPersistentPDF: true
+                    isPersistentPDF: true,
+                    githubFileInfo: githubFileInfo // Store GitHub metadata
                 };
             }
         } catch (error) {
@@ -2579,6 +2624,105 @@ class LiteratureManager {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    // GitHub Settings Methods
+    showGithubSettingsModal() {
+        // Load current token if exists
+        const currentToken = githubStorage.getToken();
+        if (currentToken) {
+            document.getElementById('githubTokenInput').value = currentToken;
+        }
+        
+        // Update status
+        this.updateGithubStatus();
+        
+        document.getElementById('githubSettingsModal').classList.remove('hidden');
+    }
+
+    hideGithubSettingsModal() {
+        document.getElementById('githubSettingsModal').classList.add('hidden');
+    }
+
+    async testGithubConnection() {
+        const tokenInput = document.getElementById('githubTokenInput');
+        const token = tokenInput.value.trim();
+        
+        if (!token) {
+            this.showNotification('Please enter a GitHub token', 'error');
+            return;
+        }
+        
+        // Temporarily set token for testing
+        githubStorage.setToken(token);
+        
+        try {
+            this.showNotification('Testing connection...', 'info');
+            const isValid = await githubStorage.validateToken();
+            
+            if (isValid) {
+                this.showNotification('✅ Connection successful!', 'success');
+                document.getElementById('githubStatus').textContent = 'Connected';
+                document.getElementById('githubStatus').style.color = '#16a34a';
+            } else {
+                this.showNotification('❌ Connection failed. Please check your token.', 'error');
+                document.getElementById('githubStatus').textContent = 'Connection failed';
+                document.getElementById('githubStatus').style.color = '#dc2626';
+            }
+        } catch (error) {
+            this.showNotification('❌ Connection error: ' + error.message, 'error');
+            document.getElementById('githubStatus').textContent = 'Error';
+            document.getElementById('githubStatus').style.color = '#dc2626';
+        }
+    }
+
+    async saveGithubSettings() {
+        const tokenInput = document.getElementById('githubTokenInput');
+        const token = tokenInput.value.trim();
+        
+        if (!token) {
+            this.showNotification('Please enter a GitHub token', 'error');
+            return;
+        }
+        
+        // Test connection first
+        githubStorage.setToken(token);
+        const isValid = await githubStorage.validateToken();
+        
+        if (isValid) {
+            // Save token
+            githubStorage.setToken(token);
+            this.showNotification('✅ GitHub storage configured successfully!', 'success');
+            this.updateGithubStatus();
+            this.hideGithubSettingsModal();
+        } else {
+            this.showNotification('❌ Invalid token. Please check and try again.', 'error');
+        }
+    }
+
+    async updateGithubStatus() {
+        const statusElement = document.getElementById('githubStatus');
+        const token = githubStorage.getToken();
+        
+        if (!token) {
+            statusElement.textContent = 'Not configured';
+            statusElement.style.color = '#6b7280';
+            return;
+        }
+        
+        try {
+            const isValid = await githubStorage.validateToken();
+            if (isValid) {
+                statusElement.textContent = 'Connected';
+                statusElement.style.color = '#16a34a';
+            } else {
+                statusElement.textContent = 'Token invalid';
+                statusElement.style.color = '#dc2626';
+            }
+        } catch (error) {
+            statusElement.textContent = 'Connection error';
+            statusElement.style.color = '#dc2626';
+        }
     }
 }
 
