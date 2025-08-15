@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microgestures</title>
+    <meta name="description" content="Professional academic paper management tool for researchers and scholars">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="indexeddb-storage.js"></script>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1 class="header-title">Microgestures</h1>
+                <div class="header-search">
+                    <input type="text" id="searchInput" class="form-control search-input" placeholder="Search title, author, abstract or keywords...">
+                    <button class="btn btn--primary search-btn" id="searchBtn">Search</button>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn--primary" id="uploadBtn">Upload Paper</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <!-- Category Navigation -->
+        <nav class="category-nav">
+            <div class="category-tabs" id="categoryTabs">
+                <button class="category-tab active" data-category="all">All Categories</button>
+                <button class="category-tab" data-category="Accessible Interaction">Accessible Interaction</button>
+                <button class="category-tab" data-category="HCI New Wearable Devices">HCI New Wearable Devices</button>
+                <button class="category-tab" data-category="Immersive Interaction">Immersive Interaction</button>
+                <button class="category-tab" data-category="Mobile Device">Mobile Device</button>
+                <button class="category-tab" data-category="Special Scenarios">Special Scenarios</button>
+            </div>
+            
+            <!-- Statistics Bar -->
+            <div class="stats-summary">
+                <div class="stats-item">
+                    <span class="stats-label">Current Category:</span>
+                    <span class="stats-value" id="categoryCount">0</span>
+                </div>
+                <div class="stats-item">
+                    <span class="stats-label">Total Papers:</span>
+                    <span class="stats-value" id="totalCount">0</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Content Area -->
+        <div class="content-area">
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Sort Controls -->
+                <div class="sort-bar">
+                    <div class="sort-controls">
+                        <label>Sort:</label>
+                        <select class="form-control sort-select" id="sortSelect">
+                            <option value="year-desc">Latest Published</option>
+                            <option value="citations-desc">Most Citations</option>
+                            <option value="year-asc">Publication Date</option>
+                            <option value="title-asc">Title Order</option>
+                        </select>
+                    </div>
+                    <div class="view-info">
+                        <span id="filteredCount">0</span> papers
+                    </div>
+                </div>
+
+                <!-- Papers Grid -->
+                <div class="papers-grid" id="papersGrid"></div>
+
+                <!-- Pagination -->
+                <div class="pagination" id="pagination"></div>
+            </main>
+
+            <!-- Right Sidebar Filters -->
+            <aside class="filters-sidebar">
+                <div class="filters-header">
+                    <h3>Filter Conditions</h3>
+                    <button class="btn btn--sm btn--outline reset-filters" id="resetFilters">Reset</button>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Year Range</label>
+                    <div class="year-filter">
+                        <input type="range" id="yearMin" min="2000" max="2024" value="2000" class="year-slider">
+                        <input type="range" id="yearMax" min="2000" max="2024" value="2024" class="year-slider">
+                        <div class="year-display">
+                            <span id="yearMinDisplay">2000</span> - <span id="yearMaxDisplay">2024</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Research Method</label>
+                    <div class="checkbox-group" id="methodologyFilters"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Study Type</label>
+                    <div class="checkbox-group" id="studyTypeFilters"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Journal/Conference</label>
+                    <select class="form-control" id="venueFilter">
+                        <option value="">All Journals/Conferences</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Citations</label>
+                    <div class="citation-filter">
+                        <input type="number" id="citationMin" class="form-control citation-input" placeholder="Minimum" min="0">
+                        <input type="number" id="citationMax" class="form-control citation-input" placeholder="Maximum" min="0">
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Image Manager Modal -->
+    <div class="modal hidden" id="imageManagerModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Manage Paper Images</h3>
+                <button class="modal-close" id="closeImageManager">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="current-image-section">
+                    <h4>Current Image</h4>
+                    <div class="current-image-container" id="currentImageContainer">
+                        <div class="current-image-placeholder">
+                            <span>📄</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="image-actions">
+                    <div class="action-group">
+                        <h4>Replace Image</h4>
+                        <div class="upload-area-small" id="imageUploadArea">
+                            <div class="upload-icon-small">📷</div>
+                            <p class="upload-text-small">Click or drag image here</p>
+                            <p class="upload-hint-small">Supports JPG, PNG, GIF formats</p>
+                            <input type="file" id="imageFileInput" accept="image/*" hidden>
+                        </div>
+                    </div>
+                    
+                    <div class="action-group">
+                        <h4>Actions</h4>
+                        <div class="button-group">
+                            <button class="btn btn--outline" id="resetImageBtn">Reset to Default</button>
+                            <button class="btn btn--secondary" id="removeImageBtn">Remove Image</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div class="modal hidden" id="uploadModal">
+        <div class="modal-content upload-modal-content">
+            <div class="modal-header">
+                <h3>Upload Research Paper</h3>
+                <button class="modal-close" id="closeUpload">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-tabs">
+                    <button class="upload-tab active" data-tab="file">File Upload</button>
+                    <button class="upload-tab" data-tab="manual">Manual Entry</button>
+                </div>
+                
+                <!-- File Upload Tab -->
+                <div class="upload-tab-content" id="fileUploadTab">
+                    <!-- Category Selection for Batch Upload -->
+                    <div class="upload-category-section">
+                        <h4>Select Target Research Field Category</h4>
+                        <p class="category-help">All uploaded files will be categorized under the selected field</p>
+                        <div class="category-selection-enhanced">
+                            <div class="category-grid">
+                                <div class="category-card" data-category="auto">
+                                    <input type="radio" id="categoryAuto" name="uploadCategory" value="auto" checked>
+                                    <label for="categoryAuto">
+                                        <div class="category-icon">🤖</div>
+                                        <div class="category-info">
+                                            <h5>Auto Recognition</h5>
+                                            <p>AI will detect category from content</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="category-card" data-category="Accessible Interaction">
+                                    <input type="radio" id="categoryAccessible" name="uploadCategory" value="Accessible Interaction">
+                                    <label for="categoryAccessible">
+                                        <div class="category-icon">♿</div>
+                                        <div class="category-info">
+                                            <h5>Accessible Interaction</h5>
+                                            <p>Accessibility and inclusive design</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="category-card" data-category="HCI New Wearable Devices">
+                                    <input type="radio" id="categoryWearable" name="uploadCategory" value="HCI New Wearable Devices">
+                                    <label for="categoryWearable">
+                                        <div class="category-icon">⌚</div>
+                                        <div class="category-info">
+                                            <h5>HCI New Wearable Devices</h5>
+                                            <p>Smartwatches, AR/VR, IoT devices</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="category-card" data-category="Immersive Interaction">
+                                    <input type="radio" id="categoryImmersive" name="uploadCategory" value="Immersive Interaction">
+                                    <label for="categoryImmersive">
+                                        <div class="category-icon">🥽</div>
+                                        <div class="category-info">
+                                            <h5>Immersive Interaction</h5>
+                                            <p>VR, AR, Mixed Reality</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="category-card" data-category="Mobile Device">
+                                    <input type="radio" id="categoryMobile" name="uploadCategory" value="Mobile Device">
+                                    <label for="categoryMobile">
+                                        <div class="category-icon">📱</div>
+                                        <div class="category-info">
+                                            <h5>Mobile Device</h5>
+                                            <p>Smartphones, tablets, mobile UX</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="category-card" data-category="Special Scenarios">
+                                    <input type="radio" id="categorySpecial" name="uploadCategory" value="Special Scenarios">
+                                    <label for="categorySpecial">
+                                        <div class="category-icon">⚡</div>
+                                        <div class="category-info">
+                                            <h5>Special Scenarios</h5>
+                                            <p>Emergency, healthcare, education</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="selected-category-display">
+                            <div class="category-badge">
+                                <span class="badge-icon">🤖</span>
+                                <span class="badge-text">Auto Recognition Selected</span>
+                            </div>
+                            <p class="category-description">Files will be automatically categorized based on their content</p>
+                        </div>
+                    </div>
+                    
+                    <div class="batch-upload-area" id="batchUploadArea">
+                        <div class="upload-zone" id="uploadZone">
+                            <div class="upload-icon">📚</div>
+                            <h4 class="upload-title">Batch Upload Research Papers</h4>
+                            <p class="upload-text">Drag multiple files here or click to select</p>
+                            <p class="upload-hint">Supports PDF, DOC, JSON, CSV formats • Up to 50 files</p>
+                            <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.json,.csv" multiple hidden>
+                            <div class="upload-actions">
+                                <button class="btn btn--primary btn--lg" id="selectFileBtn">
+                                    <span>📁</span> Select Files
+                                </button>
+                                <button class="btn btn--outline btn--lg" id="selectFolderBtn">
+                                    <span>📂</span> Select Folder
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Batch Processing Panel -->
+                        <div class="batch-panel hidden" id="batchPanel">
+                            <div class="batch-header">
+                                <div class="batch-info">
+                                    <h4 id="batchTitle">Selected Files</h4>
+                                    <p id="batchSummary">0 files ready for upload</p>
+                                </div>
+                                <div class="batch-controls">
+                                    <button class="btn btn--outline btn--sm" id="clearAllBtn">Clear All</button>
+                                    <button class="btn btn--primary" id="startBatchBtn">Start Upload</button>
+                                </div>
+                            </div>
+                            
+                            <div class="file-queue" id="fileQueue">
+                                <!-- Dynamic file list will be inserted here -->
+                            </div>
+                            
+                            <div class="batch-progress hidden" id="batchProgress">
+                                <div class="overall-progress">
+                                    <div class="progress-header">
+                                        <span>Overall Progress</span>
+                                        <span id="overallProgressText">0 / 0</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="overallProgressFill"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="batch-status">
+                                    <div class="status-item">
+                                        <span class="status-label">Queued:</span>
+                                        <span class="status-count" id="queuedCount">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Processing:</span>
+                                        <span class="status-count" id="processingCount">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Completed:</span>
+                                        <span class="status-count" id="completedCount">0</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Failed:</span>
+                                        <span class="status-count" id="failedCount">0</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="batch-actions">
+                                    <button class="btn btn--outline" id="pauseBatchBtn">Pause</button>
+                                    <button class="btn btn--outline" id="cancelBatchBtn">Cancel</button>
+                                    <button class="btn btn--secondary" id="retryFailedBtn" disabled>Retry Failed</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Manual Entry Tab -->
+                <div class="upload-tab-content hidden" id="manualEntryTab">
+                    <form id="manualEntryForm" class="manual-entry-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Paper Title *</label>
+                                <input type="text" class="form-control" id="titleInput" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Authors *</label>
+                                <input type="text" class="form-control" id="authorsInput" placeholder="Separate multiple authors with commas" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Publication Year *</label>
+                                <input type="number" class="form-control" id="yearInput" min="1900" max="2030" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Journal/Conference *</label>
+                                <input type="text" class="form-control" id="journalInput" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Research Field *</label>
+                                <select class="form-control" id="researchAreaInput" required>
+                                    <option value="">Please select</option>
+                                    <option value="Accessible Interaction">Accessible Interaction</option>
+                                    <option value="HCI New Wearable Devices">HCI New Wearable Devices</option>
+                                    <option value="Immersive Interaction">Immersive Interaction</option>
+                                    <option value="Mobile Device">Mobile Device</option>
+                                    <option value="Special Scenarios">Special Scenarios</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Research Method *</label>
+                                <select class="form-control" id="methodologyInput" required>
+                                    <option value="">Please select</option>
+                                    <option value="Experimental">Experimental Research</option>
+                                    <option value="Survey">Survey</option>
+                                    <option value="Computational">Computational Methods</option>
+                                    <option value="Design Research">Design Research</option>
+                                    <option value="Theoretical">Theoretical Research</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Study Type *</label>
+                                <select class="form-control" id="studyTypeInput" required>
+                                    <option value="">Please select</option>
+                                    <option value="Empirical">Empirical Research</option>
+                                    <option value="Review">Review</option>
+                                    <option value="Case Study">Case Study</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Abstract</label>
+                            <textarea class="form-control" id="abstractInput" rows="3" placeholder="Enter paper abstract"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Keywords</label>
+                            <input type="text" class="form-control" id="keywordsInput" placeholder="Separate multiple keywords with commas">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Citations</label>
+                                <input type="number" class="form-control" id="citationsInput" min="0" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Downloads</label>
+                                <input type="number" class="form-control" id="downloadsInput" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">DOI</label>
+                            <input type="text" class="form-control" id="doiInput" placeholder="10.xxxx/xxxxxx">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn--outline" id="cancelManualEntry">Cancel</button>
+                            <button type="submit" class="btn btn--primary">Add Paper</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Viewer Modal -->
+    <div class="modal hidden" id="pdfViewerModal">
+        <div class="modal-content pdf-viewer-content pdf-viewer-fullscreen">
+            <div class="modal-header pdf-minimal-header">
+                <h3 id="pdfViewerTitle">PDF Document Viewer</h3>
+                <button class="modal-close pdf-close-btn" id="closePdfViewer">&times;</button>
+            </div>
+            <!-- Floating close button for better visibility -->
+            <div class="pdf-floating-close">
+                <button class="floating-close-btn" onclick="document.getElementById('closePdfViewer').click()" title="Close PDF Viewer">
+                    ✕
+                </button>
+            </div>
+            <div class="modal-body pdf-viewer-body pdf-fullscreen-body">
+                <div class="pdf-loading" id="pdfLoading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading PDF...</p>
+                </div>
+                <div class="pdf-scroll-container hidden" id="pdfScrollContainer">
+                    <div class="pdf-pages-container" id="pdfPagesContainer">
+                        <!-- PDF pages will be rendered here -->
+                    </div>
+                </div>
+                <div class="pdf-error hidden" id="pdfError">
+                    <h3>📄 Unable to load PDF</h3>
+                    <p>PDF file may be corrupted or format not supported</p>
+                    <button class="btn btn--primary" onclick="document.getElementById('pdfViewerModal').classList.add('hidden')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paper Details Modal -->
+    <div class="modal hidden" id="paperModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="paperTitle"></h3>
+                <button class="modal-close" id="closePaper">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="paper-details" id="paperDetails"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
