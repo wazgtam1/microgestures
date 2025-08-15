@@ -2476,9 +2476,21 @@ class LiteratureManager {
                 pdfData = bytes;
                 console.log('PDF data converted, size:', bytes.length);
             } else {
-                // For other URL types, fetch as array buffer
+                // For GitHub URLs and other URL types, fetch with proper headers
                 console.log('Fetching PDF from URL...');
-                const response = await fetch(pdfUrl);
+                const response = await fetch(pdfUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/pdf',
+                        'Cache-Control': 'no-cache'
+                    },
+                    mode: 'cors'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 pdfData = await response.arrayBuffer();
                 console.log('PDF fetched, size:', pdfData.byteLength);
             }
