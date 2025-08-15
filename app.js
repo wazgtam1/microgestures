@@ -87,6 +87,15 @@ class LiteratureManager {
     async loadData() {
         console.log('🔄 Starting loadData...');
         
+        // Check for explicit deletion marker - if user deleted data, never reload from GitHub
+        const deletionMarker = localStorage.getItem('papers_explicitly_deleted');
+        if (deletionMarker === 'true') {
+            console.log('🚫 User explicitly deleted all papers - staying empty');
+            this.papers = [];
+            this.filteredPapers = [];
+            return;
+        }
+        
         // Always prioritize local storage over shared GitHub database
         // This ensures deletions are persistent
         
@@ -142,8 +151,7 @@ class LiteratureManager {
             }
         }
         
-        // Only load from GitHub if no local storage exists
-        // This allows sharing while respecting deletions
+        // Only load from GitHub if no local storage exists AND no deletion marker
         console.log('🌐 No local data found, trying to load shared database from GitHub...');
         try {
             const sharedResult = await githubStorage.downloadPapersMetadata();
@@ -3043,51 +3051,45 @@ class LiteratureManager {
             const deletedCount = this.papers.length;
             this.showNotification('Deleting all papers and files...', 'info');
             
-            // 1. Delete all PDF files from GitHub if configured
+            // 1. Set deletion marker FIRST to prevent reload from GitHub
+            localStorage.setItem('papers_explicitly_deleted', 'true');
+            
+            // 2. Clear papers array 
+            this.papers = [];
+            
+            // 3. Clear all local storage types
+            await this.saveData(); // This will clear IndexedDB and save empty array
+            localStorage.removeItem('literaturePapers');
+            
+            // 4. Try to delete GitHub content (but don't fail if it doesn't work)
             if (githubStorage.getToken()) {
-                const githubPapers = this.papers.filter(paper => paper.githubFileInfo);
-                if (githubPapers.length > 0) {
-                    this.showNotification(`Deleting ${githubPapers.length} PDF files from GitHub...`, 'info');
-                    
+                try {
+                    // Delete all PDF files from GitHub
+                    const githubPapers = this.papers.filter(paper => paper.githubFileInfo);
                     for (const paper of githubPapers) {
                         try {
                             await githubStorage.deletePDF(paper.githubFileInfo.filename, paper.githubFileInfo.sha);
                             console.log(`PDF deleted from GitHub: ${paper.githubFileInfo.filename}`);
                         } catch (error) {
-                            console.warn(`Error deleting PDF ${paper.githubFileInfo.filename}:`, error);
+                            console.warn(`Could not delete PDF ${paper.githubFileInfo.filename}:`, error);
                         }
                     }
-                }
-            }
-            
-            // 2. Clear papers array FIRST
-            this.papers = [];
-            
-            // 3. Clear all storage types using the updated saveData method
-            // This will clear IndexedDB and save empty array
-            await this.saveData();
-            
-            // 4. Explicitly clear localStorage
-            localStorage.removeItem('literaturePapers');
-            
-            // 5. Update GitHub shared database to empty state
-            // This ensures others won't see the deleted content either
-            if (githubStorage.getToken()) {
-                try {
+                    
+                    // Clear GitHub shared database
                     await githubStorage.uploadPapersMetadata([]);
                     console.log('GitHub shared database cleared');
                 } catch (error) {
-                    console.warn('Error clearing GitHub shared database:', error);
+                    console.warn('GitHub cleanup failed, but local deletion completed:', error);
                 }
             }
             
-            // 6. Update UI
+            // 5. Update UI
             this.applyFilters();
             this.initializeFilters();
             this.renderPapersGrid();
             this.updatePagination();
             
-            this.showNotification(`✅ All ${deletedCount} papers completely deleted from all locations. Others will no longer see your shared content.`, 'success');
+            this.showNotification(`✅ All ${deletedCount} papers deleted. Local deletion guaranteed, GitHub cleanup attempted.`, 'success');
         } catch (error) {
             console.error('Error deleting all papers:', error);
             this.showNotification('❌ Failed to delete all papers: ' + error.message, 'error');
