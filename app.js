@@ -3264,14 +3264,13 @@ class LiteratureManager {
     async handleShareLinkAccess() {
         const urlParams = new URLSearchParams(window.location.search);
         const shareParam = urlParams.get('share');
-        const pathSegments = window.location.pathname.split('/');
-        const shareId = pathSegments[2]; // /share/shareId格式
+        const shareId = urlParams.get('share_id');
         
-        if (shareId && shareId !== '') {
-            // Supabase分享链接
+        if (shareId) {
+            // Supabase分享链接 (新格式: ?share_id=xxx)
             await this.loadSharedPapers(shareId);
         } else if (shareParam) {
-            // URL参数分享链接
+            // URL参数分享链接 (旧格式: ?share=xxx)
             await this.loadSharedPapersFromUrl(shareParam);
         }
     }
