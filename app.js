@@ -3186,33 +3186,78 @@ class LiteratureManager {
 
     // 显示分享链接模态框
     showShareLinkModal(shareUrl) {
-        document.getElementById('shareUrlInput').value = shareUrl;
-        document.getElementById('shareStatsCount').textContent = this.papers.length;
-        document.getElementById('shareStatsDate').textContent = new Date().toLocaleDateString();
-        document.getElementById('shareStats').style.display = 'block';
-        document.getElementById('shareLinkModal').classList.remove('hidden');
+        const modal = document.getElementById('shareLinkModal');
+        const urlInput = document.getElementById('shareUrlInput');
+        const statsCount = document.getElementById('shareStatsCount');
+        const statsDate = document.getElementById('shareStatsDate');
+        const shareStats = document.getElementById('shareStats');
+        
+        // 确保所有元素都存在
+        if (!modal || !urlInput || !statsCount || !statsDate || !shareStats) {
+            console.error('Share link modal elements not found');
+            this.showNotification('Share link interface not available', 'error');
+            return;
+        }
+        
+        // 设置分享链接内容
+        urlInput.value = shareUrl;
+        statsCount.textContent = this.papers.length;
+        statsDate.textContent = new Date().toLocaleDateString();
+        shareStats.style.display = 'block';
+        
+        // 显示模态框
+        modal.classList.remove('hidden');
+        
+        // 确保模态框在最前面
+        modal.style.zIndex = '10000';
+        
+        console.log('Share link modal opened with URL:', shareUrl);
     }
 
     // 设置分享链接事件监听器
     setupShareLinkEvents() {
-        // 关闭分享链接模态框
-        document.getElementById('closeShareLink').addEventListener('click', () => {
-            document.getElementById('shareLinkModal').classList.add('hidden');
-        });
+        // 确保元素存在后再添加事件监听器
+        const closeBtn = document.getElementById('closeShareLink');
+        const copyBtn = document.getElementById('copyShareUrl');
         
-        // 复制分享链接
-        document.getElementById('copyShareUrl').addEventListener('click', async () => {
-            const shareUrl = document.getElementById('shareUrlInput').value;
-            try {
-                await navigator.clipboard.writeText(shareUrl);
-                this.showNotification('Share link copied to clipboard!', 'success');
-            } catch (error) {
-                // 降级复制方法
-                document.getElementById('shareUrlInput').select();
-                document.execCommand('copy');
-                this.showNotification('Share link copied!', 'success');
-            }
-        });
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                document.getElementById('shareLinkModal').classList.add('hidden');
+            });
+        }
+        
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async () => {
+                const shareUrl = document.getElementById('shareUrlInput')?.value;
+                if (!shareUrl) {
+                    this.showNotification('No share URL to copy', 'warning');
+                    return;
+                }
+                
+                try {
+                    await navigator.clipboard.writeText(shareUrl);
+                    this.showNotification('Share link copied to clipboard!', 'success');
+                } catch (error) {
+                    // 降级复制方法
+                    const urlInput = document.getElementById('shareUrlInput');
+                    if (urlInput) {
+                        urlInput.select();
+                        document.execCommand('copy');
+                        this.showNotification('Share link copied!', 'success');
+                    }
+                }
+            });
+        }
+        
+        // 模态框背景点击关闭
+        const modal = document.getElementById('shareLinkModal');
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target.id === 'shareLinkModal') {
+                    modal.classList.add('hidden');
+                }
+            });
+        }
     }
 
     // 处理分享链接访问
