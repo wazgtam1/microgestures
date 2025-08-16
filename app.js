@@ -536,14 +536,15 @@ class LiteratureManager {
             this.removePaperImage();
         });
         
-        // PDF viewer events
-        document.getElementById('closePdfViewer').addEventListener('click', () => {
-            this.closePdfViewer();
-        });
-        
-        document.getElementById('pdfViewerModal').addEventListener('click', (e) => {
-            if (e.target.id === 'pdfViewerModal') {
-                this.closePdfViewer();
+        // PDF download functionality (simplified)
+        document.getElementById('downloadPdfBtn')?.addEventListener('click', () => {
+            if (this.currentPdfUrl) {
+                const link = document.createElement('a');
+                link.href = this.currentPdfUrl;
+                link.download = (this.currentPdfTitle || 'document') + '.pdf';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             }
         });
     }
@@ -1050,16 +1051,11 @@ class LiteratureManager {
                         <div class="detail-label">Links</div>
                         <div class="detail-links">
                             ${paper.pdfUrl && paper.pdfUrl !== '#' ? 
-                                (paper.pdfUrl.startsWith('data:') || paper.pdfUrl.includes('cdn.jsdelivr.net') || paper.pdfUrl.includes('raw.githubusercontent.com') ? 
-                                    `<button class="detail-link detail-link--primary" onclick="literatureManager.showPdfViewerAndCloseModal('${paper.pdfUrl}', '${paper.title}')">📄 View PDF Document (Built-in Viewer)</button>` :
-                                    paper.pdfUrl.startsWith('blob:') ?
-                                        `<span class="detail-link detail-link--disabled">⚠️ PDF document link expired</span>` :
-                                        `<a href="${paper.pdfUrl}" target="_blank" class="detail-link detail-link--primary">📄 View PDF Document</a>`
-                                ) :
+                                `<a href="${paper.pdfUrl}" target="_blank" rel="noopener noreferrer" class="detail-link detail-link--primary">📄 Open PDF in New Window</a>` :
                                 `<span class="detail-link detail-link--disabled">PDF document unavailable</span>`
                             }
                             ${paper.websiteUrl && paper.websiteUrl !== '#' ? 
-                                `<a href="${paper.websiteUrl}" target="_blank" class="detail-link detail-link--secondary">🌐 Website Link</a>` :
+                                `<a href="${paper.websiteUrl}" target="_blank" rel="noopener noreferrer" class="detail-link detail-link--secondary">🌐 Website Link</a>` :
                                 `<span class="detail-link detail-link--disabled">Website link unavailable</span>`
                             }
                         </div>
