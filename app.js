@@ -3128,7 +3128,7 @@ class LiteratureManager {
         }
     }
 
-    // 生成分享链接 - 使用GitHub Gist
+    // 生成分享链接 - 使用JSONBin.io
     async generateShareLink() {
         if (this.papers.length === 0) {
             this.showNotification('No papers to share', 'warning');
@@ -3153,7 +3153,7 @@ class LiteratureManager {
                     citations: paper.citations,
                     downloads: paper.downloads,
                     doi: paper.doi,
-                    thumbnail: paper.thumbnail // 保留缩略图用于展示
+                    thumbnail: paper.thumbnail
                 })),
                 metadata: {
                     shared_at: new Date().toISOString(),
@@ -3162,31 +3162,22 @@ class LiteratureManager {
                 }
             };
             
-            // 创建匿名GitHub Gist
-            const gistData = {
-                description: `Shared Paper Collection - ${this.papers.length} papers`,
-                public: false, // 设为私有，只有有链接的人能访问
-                files: {
-                    "papers.json": {
-                        content: JSON.stringify(shareData, null, 2)
-                    }
-                }
-            };
-            
-            const response = await fetch('https://api.github.com/gists', {
+            // 使用JSONBin.io API
+            const response = await fetch('https://api.jsonbin.io/v3/b', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(gistData)
+                body: JSON.stringify(shareData)
             });
             
             if (!response.ok) {
-                throw new Error(`GitHub API error: ${response.status}`);
+                throw new Error(`JSONBin API error: ${response.status}`);
             }
             
             const result = await response.json();
-            const shareUrl = `${window.location.origin}?gist=${result.id}`;
+            const binId = result.metadata.id;
+            const shareUrl = `${window.location.origin}?bin=${binId}`;
             
             this.showShareLinkModal(shareUrl);
             this.showNotification(`✅ 分享链接已生成！包含 ${this.papers.length} 篇论文`, 'success');
@@ -3194,41 +3185,62 @@ class LiteratureManager {
         } catch (error) {
             console.error('❌ Error generating share link:', error);
             
-            // 降级到本地导出方案
-            this.showNotification('在线分享失败，为您提供本地导出选项', 'warning');
+            // 降级到压缩URL方案
+            this.showNotification('在线分享失败，尝试压缩链接方案', 'warning');
             setTimeout(() => {
-                this.generateLocalExportOption();
+                this.generateCompressedShareLink();
             }, 1000);
         }
     }
     
-    // 本地导出方案（降级选项）
-    generateLocalExportOption() {
-        const exportData = {
-            papers: this.papers,
-            exported_at: new Date().toISOString(),
-            count: this.papers.length,
-            app_name: 'Microgestures Paper Collection'
-        };
-        
-        const dataStr = JSON.stringify(exportData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `papers_collection_${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        this.showNotification('📥 论文集合已导出到本地文件，您可以手动分享此文件', 'info');
-        
-        // 同时显示导入说明
-        setTimeout(() => {
-            alert('📋 分享说明：\n\n1. 刚才已下载了论文集合文件\n2. 您可以通过邮件、网盘等方式分享此文件\n3. 接收方打开网站后，点击"Upload Paper"按钮上传此JSON文件即可查看所有论文');
-        }, 500);
+    // 压缩URL分享方案（降级）
+    generateCompressedShareLink() {
+        try {
+            // 精简数据
+            const compactData = {
+                p: this.papers.map(paper => ({
+                    t: paper.title,
+                    a: paper.authors.slice(0, 2), // 只保留前2个作者
+                    y: paper.year,
+                    j: paper.journal,
+                    r: paper.researchArea,
+                    c: paper.citations,
+                    th: paper.thumbnail
+                })),
+                c: this.papers.length
+            };
+            
+            const jsonString = JSON.stringify(compactData);
+            const encodedData = btoa(unescape(encodeURIComponent(jsonString)));
+            const shareUrl = `${window.location.origin}?data=${encodedData}`;
+            
+            if (shareUrl.length > 2000) {
+                // 进一步压缩
+                const ultraCompact = {
+                    p: this.papers.slice(0, 20).map(paper => ({ // 只分享前20个
+                        t: paper.title.substring(0, 50),
+                        a: paper.authors[0] || 'Unknown',
+                        y: paper.year,
+                        r: paper.researchArea
+                    })),
+                    c: this.papers.length
+                };
+                
+                const ultraJson = JSON.stringify(ultraCompact);
+                const ultraEncoded = btoa(unescape(encodeURIComponent(ultraJson)));
+                const ultraUrl = `${window.location.origin}?data=${ultraEncoded}`;
+                
+                this.showShareLinkModal(ultraUrl);
+                this.showNotification(`⚠️ 数据太多，已压缩为前20篇论文的预览`, 'warning');
+            } else {
+                this.showShareLinkModal(shareUrl);
+                this.showNotification(`✅ 压缩分享链接已生成`, 'success');
+            }
+            
+        } catch (error) {
+            console.error('❌ Error generating compressed link:', error);
+            this.showNotification('分享链接生成失败', 'error');
+        }
     }
 
     // URL参数分享链接（降级方案）
@@ -3335,60 +3347,43 @@ class LiteratureManager {
     // 处理分享链接访问
     async handleShareLinkAccess() {
         const urlParams = new URLSearchParams(window.location.search);
-        const shareParam = urlParams.get('share');
-        const shareIdFromParam = urlParams.get('share_id');
-        const gistId = urlParams.get('gist'); // 新增Gist支持
-        
-        // 从路径中提取shareId (支持 /share/shareId 格式)
-        const pathSegments = window.location.pathname.split('/');
-        const shareIdFromPath = pathSegments[1] === 'share' ? pathSegments[2] : null;
-        
-        // 优先使用路径中的shareId，然后是URL参数
-        const shareId = shareIdFromPath || shareIdFromParam;
+        const binId = urlParams.get('bin'); // JSONBin.io ID
+        const dataParam = urlParams.get('data'); // 压缩数据
+        const shareParam = urlParams.get('share'); // 旧格式
         
         console.log('🔗 Share link detection:');
         console.log('- Current URL:', window.location.href);
-        console.log('- Path segments:', pathSegments);
-        console.log('- Share ID from path:', shareIdFromPath);
-        console.log('- Share ID from param:', shareIdFromParam);
-        console.log('- Gist ID:', gistId);
-        console.log('- Final share ID:', shareId);
-        console.log('- Share param (old format):', shareParam);
+        console.log('- Bin ID:', binId);
+        console.log('- Data param:', dataParam ? 'present' : 'none');
+        console.log('- Share param:', shareParam ? 'present' : 'none');
         
-        if (gistId) {
-            console.log('📋 Loading shared papers from GitHub Gist:', gistId);
-            await this.loadSharedPapersFromGist(gistId);
-        } else if (shareId) {
-            console.log('📋 Loading shared papers with ID:', shareId);
-            // Supabase分享链接
-            await this.loadSharedPapers(shareId);
+        if (binId) {
+            console.log('📋 Loading shared papers from JSONBin:', binId);
+            await this.loadSharedPapersFromBin(binId);
+        } else if (dataParam) {
+            console.log('📋 Loading shared papers from compressed data');
+            await this.loadSharedPapersFromData(dataParam);
         } else if (shareParam) {
-            console.log('📋 Loading shared papers from URL param:', shareParam);
-            // URL参数分享链接 (旧格式: ?share=xxx)
+            console.log('📋 Loading shared papers from old format');
             await this.loadSharedPapersFromUrl(shareParam);
         } else {
             console.log('⚠️ No share parameter found in URL');
         }
     }
     
-    // 从GitHub Gist加载分享的论文
-    async loadSharedPapersFromGist(gistId) {
+    // 从JSONBin.io加载分享的论文
+    async loadSharedPapersFromBin(binId) {
         try {
             this.showNotification('Loading shared papers...', 'info');
             
-            const response = await fetch(`https://api.github.com/gists/${gistId}`);
+            const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`);
             if (!response.ok) {
-                throw new Error(`Failed to fetch gist: ${response.status}`);
+                throw new Error(`Failed to fetch data: ${response.status}`);
             }
             
-            const gistData = await response.json();
-            const papersFile = gistData.files['papers.json'];
+            const result = await response.json();
+            const shareData = result.record;
             
-            if (!papersFile) {
-                throw new Error('Papers data not found in gist');
-            }
-            
-            const shareData = JSON.parse(papersFile.content);
             this.papers = shareData.papers || [];
             this.filteredPapers = [...this.papers];
             
@@ -3409,11 +3404,70 @@ class LiteratureManager {
                 }, 2000);
             }
             
-            console.log('✅ Successfully loaded shared papers from Gist:', this.papers.length);
+            console.log('✅ Successfully loaded shared papers from JSONBin:', this.papers.length);
             
         } catch (error) {
-            console.error('❌ Error loading shared papers from Gist:', error);
+            console.error('❌ Error loading shared papers from JSONBin:', error);
             this.showNotification('分享链接无效或已过期', 'error');
+        }
+    }
+    
+    // 从压缩数据加载分享的论文
+    async loadSharedPapersFromData(dataParam) {
+        try {
+            this.showNotification('Loading shared papers...', 'info');
+            
+            const jsonString = decodeURIComponent(escape(atob(dataParam)));
+            const shareData = JSON.parse(jsonString);
+            
+            // 处理压缩格式的数据
+            if (shareData.p) {
+                this.papers = shareData.p.map(p => ({
+                    id: Date.now() + Math.random(),
+                    title: p.t,
+                    authors: Array.isArray(p.a) ? p.a : [p.a],
+                    year: p.y,
+                    journal: p.j || 'Unknown Journal',
+                    researchArea: p.r || 'General',
+                    methodology: 'Experimental',
+                    studyType: 'Empirical',
+                    keywords: [],
+                    citations: p.c || 0,
+                    downloads: 0,
+                    abstract: '',
+                    doi: '',
+                    pdfUrl: '#',
+                    websiteUrl: '#',
+                    thumbnail: p.th
+                }));
+            } else {
+                // 处理完整格式的数据
+                this.papers = shareData.papers || [];
+            }
+            
+            this.filteredPapers = [...this.papers];
+            
+            // 确保UI正确更新
+            this.updateStatistics();
+            this.initializeFilters();
+            this.applyFilters();
+            this.renderPapersGrid();
+            this.updatePagination();
+            
+            const totalCount = shareData.c || this.papers.length;
+            this.showNotification(`✅ 成功加载 ${this.papers.length} 篇分享的论文`, 'success');
+            
+            if (totalCount > this.papers.length) {
+                setTimeout(() => {
+                    this.showNotification(`📋 这是压缩预览，原集合共有 ${totalCount} 篇论文`, 'info');
+                }, 2000);
+            }
+            
+            console.log('✅ Successfully loaded shared papers from compressed data:', this.papers.length);
+            
+        } catch (error) {
+            console.error('❌ Error loading shared papers from data:', error);
+            this.showNotification('分享链接数据格式错误', 'error');
         }
     }
 
