@@ -2628,6 +2628,7 @@ class LiteratureManager {
                 let fetchUrl = pdfUrl;
                 let fetchOptions = {
                     method: 'GET',
+                    mode: 'cors',
                     headers: {
                         'Accept': 'application/pdf',
                         'Cache-Control': 'no-cache'
@@ -2638,33 +2639,33 @@ class LiteratureManager {
                 const urlStrategies = [];
                 
                 if (pdfUrl.includes('cdn.jsdelivr.net')) {
-                    // Primary: jsDelivr CDN
+                    // Primary: 直接使用jsDelivr，添加CORS支持
                     urlStrategies.push({
-                        url: pdfUrl,
-                        name: 'jsDelivr CDN'
+                        url: pdfUrl + '?raw=true',
+                        name: 'jsDelivr with raw parameter',
+                        options: { ...fetchOptions, mode: 'cors' }
                     });
                     
-                    // Backup: Raw GitHub URL
+                    // Backup: Raw GitHub URL with no-cors mode
                     const rawUrl = pdfUrl.replace('https://cdn.jsdelivr.net/gh/', 'https://raw.githubusercontent.com/').replace('@main/', '/main/');
                     urlStrategies.push({
                         url: rawUrl,
-                        name: 'Raw GitHub'
+                        name: 'Raw GitHub (no-cors)',
+                        options: { ...fetchOptions, mode: 'no-cors' }
                     });
                     
-                    // Alternative: GitHub API content endpoint
-                    if (this.papers && this.papers.length > 0) {
-                        const githubApiUrl = pdfUrl.replace('https://cdn.jsdelivr.net/gh/', 'https://api.github.com/repos/').replace('@main/', '/contents/');
-                        urlStrategies.push({
-                            url: githubApiUrl,
-                            name: 'GitHub API',
-                            isApi: true
-                        });
-                    }
                 } else {
-                    // For non-jsDelivr URLs, try as-is
+                    // For non-jsDelivr URLs, try as-is with different modes
                     urlStrategies.push({
                         url: pdfUrl,
-                        name: 'Direct URL'
+                        name: 'Direct URL (cors)',
+                        options: { ...fetchOptions, mode: 'cors' }
+                    });
+                    
+                    urlStrategies.push({
+                        url: pdfUrl,
+                        name: 'Direct URL (no-cors)',
+                        options: { ...fetchOptions, mode: 'no-cors' }
                     });
                 }
                 
@@ -2675,12 +2676,7 @@ class LiteratureManager {
                     try {
                         console.log(`Trying ${strategy.name}: ${strategy.url.substring(0, 80)}...`);
                         
-                        const options = { ...fetchOptions };
-                        if (strategy.isApi && githubStorage && githubStorage.getToken()) {
-                            options.headers['Authorization'] = `token ${githubStorage.getToken()}`;
-                        }
-                        
-                        const response = await fetch(strategy.url, options);
+                        const response = await fetch(strategy.url, strategy.options);
                         
                         if (response.ok) {
                             if (strategy.isApi) {
