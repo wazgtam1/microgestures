@@ -1,11 +1,14 @@
 # Netlify redirects file
-# Static assets should be served directly
-*.js    /:splat.js    200
-*.css   /:splat.css   200
-*.json  /:splat.json  200
-*.png   /:splat.png   200
-*.jpg   /:splat.jpg   200
-*.ico   /:splat.ico   200
+# Static assets should be served directly with correct MIME types
+/app.js                 /app.js                 200
+/supabase-config.js     /supabase-config.js     200
+/indexeddb-storage.js   /indexeddb-storage.js   200
+/github-storage.js      /github-storage.js      200
+/style.css              /style.css              200
+/manifest.json          /manifest.json          200
+/*.png                  /:splat.png             200
+/*.jpg                  /:splat.jpg             200
+/*.ico                  /:splat.ico             200
 
 # All other routes redirect to index.html for SPA routing
-/*    /index.html   200
+/*                      /index.html             200

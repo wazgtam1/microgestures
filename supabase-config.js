@@ -178,7 +178,7 @@ class SupabaseStorage {
             
             if (error) throw error;
             
-            const shareUrl = `${window.location.origin}/share/${shareId}`;
+            const shareUrl = `${window.location.origin}?share_id=${shareId}`;
             console.log('✅ Share link created:', shareUrl);
             return { success: true, shareId, shareUrl };
         } catch (error) {
