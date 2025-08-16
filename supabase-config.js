@@ -47,7 +47,25 @@ class SupabaseStorage {
             // 插入新数据
             if (papers.length > 0) {
                 const papersData = papers.map(paper => ({
-                    ...paper,
+                    title: paper.title,
+                    authors: paper.authors,
+                    year: paper.year,
+                    journal: paper.journal,
+                    research_area: paper.researchArea,
+                    methodology: paper.methodology,
+                    study_type: paper.studyType,
+                    keywords: paper.keywords,
+                    citations: paper.citations,
+                    downloads: paper.downloads,
+                    abstract: paper.abstract,
+                    doi: paper.doi,
+                    pdf_url: paper.pdfUrl,
+                    website_url: paper.websiteUrl,
+                    thumbnail: paper.thumbnail,
+                    original_thumbnail: paper.originalThumbnail,
+                    pdf_file_size: paper.pdfFileSize,
+                    is_persistent_pdf: paper.isPersistentPDF,
+                    github_file_info: paper.githubFileInfo,
                     user_id: userId,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
@@ -81,8 +99,33 @@ class SupabaseStorage {
             
             if (error) throw error;
             
-            console.log(`✅ Loaded ${data.length} papers from Supabase`);
-            return { success: true, papers: data || [] };
+            // 转换数据库字段到应用字段
+            const mappedPapers = (data || []).map(paper => ({
+                id: paper.id,
+                title: paper.title,
+                authors: paper.authors,
+                year: paper.year,
+                journal: paper.journal,
+                researchArea: paper.research_area,
+                methodology: paper.methodology,
+                studyType: paper.study_type,
+                keywords: paper.keywords,
+                citations: paper.citations,
+                hIndex: Math.floor((paper.citations || 0) / 3),
+                downloads: paper.downloads,
+                abstract: paper.abstract,
+                doi: paper.doi,
+                pdfUrl: paper.pdf_url,
+                websiteUrl: paper.website_url,
+                thumbnail: paper.thumbnail,
+                originalThumbnail: paper.original_thumbnail,
+                pdfFileSize: paper.pdf_file_size,
+                isPersistentPDF: paper.is_persistent_pdf,
+                githubFileInfo: paper.github_file_info
+            }));
+            
+            console.log(`✅ Loaded ${mappedPapers.length} papers from Supabase`);
+            return { success: true, papers: mappedPapers };
         } catch (error) {
             console.error('❌ Error loading papers:', error);
             return { success: false, papers: [], error: error.message };
