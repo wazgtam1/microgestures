@@ -3273,16 +3273,24 @@ class LiteratureManager {
         // 优先使用路径中的shareId，然后是URL参数
         const shareId = shareIdFromPath || shareIdFromParam;
         
+        console.log('🔗 Share link detection:');
+        console.log('- Current URL:', window.location.href);
+        console.log('- Path segments:', pathSegments);
+        console.log('- Share ID from path:', shareIdFromPath);
+        console.log('- Share ID from param:', shareIdFromParam);
+        console.log('- Final share ID:', shareId);
+        console.log('- Share param (old format):', shareParam);
+        
         if (shareId) {
-            console.log('Loading shared papers with ID:', shareId);
+            console.log('📋 Loading shared papers with ID:', shareId);
             // Supabase分享链接
             await this.loadSharedPapers(shareId);
         } else if (shareParam) {
-            console.log('Loading shared papers from URL param:', shareParam);
+            console.log('📋 Loading shared papers from URL param:', shareParam);
             // URL参数分享链接 (旧格式: ?share=xxx)
             await this.loadSharedPapersFromUrl(shareParam);
         } else {
-            console.log('No share parameter found in URL');
+            console.log('⚠️ No share parameter found in URL');
         }
     }
 

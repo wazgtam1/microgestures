@@ -178,7 +178,7 @@ class SupabaseStorage {
             
             if (error) throw error;
             
-            const shareUrl = `${window.location.origin}?share_id=${shareId}`;
+            const shareUrl = `${window.location.origin}/share/${shareId}`;
             console.log('✅ Share link created:', shareUrl);
             return { success: true, shareId, shareUrl };
         } catch (error) {
@@ -192,15 +192,22 @@ class SupabaseStorage {
         await this.init();
         
         try {
+            console.log('🔍 Fetching shared papers with ID:', shareId);
+            
             const { data, error } = await this.supabase
                 .from('shared_collections')
                 .select('*')
                 .eq('id', shareId)
                 .single();
             
+            console.log('📊 Supabase query result:');
+            console.log('- Data:', data);
+            console.log('- Error:', error);
+            
             if (error) throw error;
             
             if (!data) {
+                console.log('❌ No data found for share ID:', shareId);
                 return { success: false, error: 'Share link not found or expired' };
             }
             
@@ -211,6 +218,7 @@ class SupabaseStorage {
                 .eq('id', shareId);
             
             console.log(`✅ Loaded shared papers:`, data.papers.length);
+            console.log('📋 Papers data:', data.papers);
             return { success: true, papers: data.papers || [], shareData: data };
         } catch (error) {
             console.error('❌ Error loading shared papers:', error);
