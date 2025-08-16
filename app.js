@@ -3264,14 +3264,25 @@ class LiteratureManager {
     async handleShareLinkAccess() {
         const urlParams = new URLSearchParams(window.location.search);
         const shareParam = urlParams.get('share');
-        const shareId = urlParams.get('share_id');
+        const shareIdFromParam = urlParams.get('share_id');
+        
+        // 从路径中提取shareId (支持 /share/shareId 格式)
+        const pathSegments = window.location.pathname.split('/');
+        const shareIdFromPath = pathSegments[1] === 'share' ? pathSegments[2] : null;
+        
+        // 优先使用路径中的shareId，然后是URL参数
+        const shareId = shareIdFromPath || shareIdFromParam;
         
         if (shareId) {
-            // Supabase分享链接 (新格式: ?share_id=xxx)
+            console.log('Loading shared papers with ID:', shareId);
+            // Supabase分享链接
             await this.loadSharedPapers(shareId);
         } else if (shareParam) {
+            console.log('Loading shared papers from URL param:', shareParam);
             // URL参数分享链接 (旧格式: ?share=xxx)
             await this.loadSharedPapersFromUrl(shareParam);
+        } else {
+            console.log('No share parameter found in URL');
         }
     }
 
@@ -3285,6 +3296,9 @@ class LiteratureManager {
                 this.papers = result.papers;
                 this.filteredPapers = [...this.papers];
                 
+                // 确保UI正确更新
+                this.updateStatistics();
+                this.initializeFilters();
                 this.applyFilters();
                 this.renderPapersGrid();
                 this.updatePagination();
@@ -3295,12 +3309,15 @@ class LiteratureManager {
                 setTimeout(() => {
                     this.showNotification(`📋 Viewing shared collection (${result.shareData.access_count} views)`, 'info');
                 }, 2000);
+                
+                console.log('✅ Successfully loaded shared papers:', this.papers.length);
             } else {
                 this.showNotification('Share link not found or expired', 'error');
+                console.error('❌ Failed to load shared papers:', result.error);
             }
         } catch (error) {
             console.error('❌ Error loading shared papers:', error);
-            this.showNotification('Failed to load shared papers', 'error');
+            this.showNotification('Failed to load shared papers: ' + error.message, 'error');
         }
     }
 
