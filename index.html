@@ -7,7 +7,9 @@
     <meta name="description" content="Professional academic paper management tool for researchers and scholars">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="supabase-config.js"></script>
     <script src="indexeddb-storage.js"></script>
     <script src="github-storage.js"></script>
 </head>
@@ -24,7 +26,8 @@
                 </div>
                 <div class="header-actions">
                     <button class="btn btn--outline" id="debugStorageBtn" onclick="literatureManager.debugStorage()">🔍 Debug Storage</button>
-                    <button class="btn btn--secondary" id="githubSettingsBtn">⚙️ GitHub Storage</button>
+                    <button class="btn btn--success" id="generateShareBtn" onclick="literatureManager.generateShareLink()">🔗 Generate Share Link</button>
+                    <button class="btn btn--secondary" id="githubSettingsBtn">⚙️ Settings</button>
                     <button class="btn btn--primary" id="uploadBtn">Upload Paper</button>
                 </div>
             </div>
@@ -453,6 +456,47 @@
                     <h3>📄 Unable to load PDF</h3>
                     <p>PDF file may be corrupted or format not supported</p>
                     <button class="btn btn--primary" onclick="document.getElementById('pdfViewerModal').classList.add('hidden')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Link Modal -->
+    <div class="modal hidden" id="shareLinkModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔗 Share Your Paper Collection</h3>
+                <button class="modal-close" id="closeShareLink">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="share-info">
+                    <p>Your paper collection has been saved to the cloud. Share this link with others:</p>
+                    
+                    <div class="share-url-container">
+                        <input type="text" id="shareUrlInput" class="form-control" readonly>
+                        <button class="btn btn--primary" id="copyShareUrl">📋 Copy</button>
+                    </div>
+                    
+                    <div class="share-stats" id="shareStats" style="display: none;">
+                        <div class="stats-item">
+                            <span class="stats-label">Papers:</span>
+                            <span class="stats-value" id="shareStatsCount">0</span>
+                        </div>
+                        <div class="stats-item">
+                            <span class="stats-label">Created:</span>
+                            <span class="stats-value" id="shareStatsDate">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="share-notes">
+                        <h4>📌 Important Notes:</h4>
+                        <ul>
+                            <li>✅ This link will always show your latest paper collection</li>
+                            <li>🗑️ If you delete papers, they will be removed from the shared link too</li>
+                            <li>🔄 Any updates you make will be reflected immediately</li>
+                            <li>🌐 Anyone with this link can view your papers</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>

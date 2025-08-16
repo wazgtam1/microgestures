@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Delete Function</title>
+    <script src="indexeddb-storage.js"></script>
+    <script src="github-storage.js"></script>
+</head>
+<body>
+    <h1>Debug Delete Function</h1>
+    <button onclick="checkStorage()">Check All Storage</button>
+    <button onclick="clearAllStorage()">Clear All Storage</button>
+    <button onclick="testData()">Add Test Data</button>
+    <div id="output"></div>
+
+    <script>
+        function log(message) {
+            const output = document.getElementById('output');
+            output.innerHTML += '<div>' + message + '</div>';
+            console.log(message);
+        }
+
+        async function checkStorage() {
+            document.getElementById('output').innerHTML = '';
+            log('=== CHECKING ALL STORAGE ===');
+            
+            // Check localStorage
+            const localStorage_data = localStorage.getItem('literaturePapers');
+            log('localStorage: ' + (localStorage_data ? JSON.parse(localStorage_data).length + ' papers' : 'empty'));
+            
+            // Check IndexedDB
+            try {
+                const storage = new IndexedDBStorage();
+                await storage.init();
+                const papers = await storage.getAllPapers();
+                log('IndexedDB: ' + (papers ? papers.length + ' papers' : 'empty'));
+            } catch (error) {
+                log('IndexedDB error: ' + error.message);
+            }
+            
+            // Check GitHub token
+            const token = githubStorage.getToken();
+            log('GitHub token: ' + (token ? 'configured' : 'not configured'));
+        }
+
+        async function clearAllStorage() {
+            log('=== CLEARING ALL STORAGE ===');
+            
+            // Clear localStorage
+            localStorage.removeItem('literaturePapers');
+            log('localStorage cleared');
+            
+            // Clear IndexedDB
+            try {
+                const storage = new IndexedDBStorage();
+                await storage.init();
+                await storage.clearAllData();
+                log('IndexedDB cleared');
+            } catch (error) {
+                log('IndexedDB clear error: ' + error.message);
+            }
+            
+            log('All storage cleared!');
+        }
+
+        async function testData() {
+            log('=== ADDING TEST DATA ===');
+            
+            const testPaper = {
+                id: 1,
+                title: "Test Paper " + Date.now(),
+                authors: ["Test Author"],
+                year: 2024,
+                journal: "Test Journal",
+                researchArea: "General"
+            };
+            
+            // Add to localStorage
+            localStorage.setItem('literaturePapers', JSON.stringify([testPaper]));
+            log('Added to localStorage');
+            
+            // Add to IndexedDB
+            try {
+                const storage = new IndexedDBStorage();
+                await storage.init();
+                await storage.savePaper(testPaper);
+                log('Added to IndexedDB');
+            } catch (error) {
+                log('IndexedDB save error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
