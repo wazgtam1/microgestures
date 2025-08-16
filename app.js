@@ -2295,8 +2295,20 @@ class LiteratureManager {
         console.log('Papers count after adding:', this.papers.length);
         console.log('Added paper:', paperData);
         
-        await this.saveData(); // Save to persistent storage
+        // 明确保存到Supabase
+        await this.saveData(); 
         console.log('Data saved to storage');
+        
+        // 强制同步到Supabase（确保保存成功）
+        if (this.storageMode === 'supabase') {
+            console.log('🔄 Force syncing to Supabase...');
+            const result = await window.supabaseStorage.savePapers(this.papers, this.userId);
+            if (result.success) {
+                console.log(`✅ Force sync successful: ${result.count} papers`);
+            } else {
+                console.error('❌ Force sync failed:', result.error);
+            }
+        }
         
         // Auto-sync to GitHub if configured
         await this.autoSyncToGitHub();
