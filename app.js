@@ -3128,7 +3128,7 @@ class LiteratureManager {
         }
     }
 
-    // 生成分享链接
+    // 生成分享链接 - 使用GitHub Gist
     async generateShareLink() {
         if (this.papers.length === 0) {
             this.showNotification('No papers to share', 'warning');
@@ -3138,25 +3138,97 @@ class LiteratureManager {
         try {
             this.showNotification('Creating share link...', 'info');
             
-            // 确保数据已保存到Supabase
-            if (this.storageMode === 'supabase') {
-                await this.saveData();
-                
-                const result = await window.supabaseStorage.createShareLink(this.papers, this.userId);
-                if (result.success) {
-                    this.currentShareId = result.shareId;
-                    this.showShareLinkModal(result.shareUrl);
-                    return;
+            // 准备分享数据
+            const shareData = {
+                papers: this.papers.map(paper => ({
+                    title: paper.title,
+                    authors: paper.authors,
+                    year: paper.year,
+                    journal: paper.journal,
+                    abstract: paper.abstract,
+                    researchArea: paper.researchArea,
+                    methodology: paper.methodology,
+                    studyType: paper.studyType,
+                    keywords: paper.keywords,
+                    citations: paper.citations,
+                    downloads: paper.downloads,
+                    doi: paper.doi,
+                    thumbnail: paper.thumbnail // 保留缩略图用于展示
+                })),
+                metadata: {
+                    shared_at: new Date().toISOString(),
+                    count: this.papers.length,
+                    app_name: 'Microgestures Paper Collection'
                 }
+            };
+            
+            // 创建匿名GitHub Gist
+            const gistData = {
+                description: `Shared Paper Collection - ${this.papers.length} papers`,
+                public: false, // 设为私有，只有有链接的人能访问
+                files: {
+                    "papers.json": {
+                        content: JSON.stringify(shareData, null, 2)
+                    }
+                }
+            };
+            
+            const response = await fetch('https://api.github.com/gists', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(gistData)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`GitHub API error: ${response.status}`);
             }
             
-            // 降级方案：使用URL参数
-            this.generateUrlBasedShareLink();
+            const result = await response.json();
+            const shareUrl = `${window.location.origin}?gist=${result.id}`;
+            
+            this.showShareLinkModal(shareUrl);
+            this.showNotification(`✅ 分享链接已生成！包含 ${this.papers.length} 篇论文`, 'success');
             
         } catch (error) {
             console.error('❌ Error generating share link:', error);
-            this.showNotification('Failed to generate share link', 'error');
+            
+            // 降级到本地导出方案
+            this.showNotification('在线分享失败，为您提供本地导出选项', 'warning');
+            setTimeout(() => {
+                this.generateLocalExportOption();
+            }, 1000);
         }
+    }
+    
+    // 本地导出方案（降级选项）
+    generateLocalExportOption() {
+        const exportData = {
+            papers: this.papers,
+            exported_at: new Date().toISOString(),
+            count: this.papers.length,
+            app_name: 'Microgestures Paper Collection'
+        };
+        
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `papers_collection_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        this.showNotification('📥 论文集合已导出到本地文件，您可以手动分享此文件', 'info');
+        
+        // 同时显示导入说明
+        setTimeout(() => {
+            alert('📋 分享说明：\n\n1. 刚才已下载了论文集合文件\n2. 您可以通过邮件、网盘等方式分享此文件\n3. 接收方打开网站后，点击"Upload Paper"按钮上传此JSON文件即可查看所有论文');
+        }, 500);
     }
 
     // URL参数分享链接（降级方案）
@@ -3265,6 +3337,7 @@ class LiteratureManager {
         const urlParams = new URLSearchParams(window.location.search);
         const shareParam = urlParams.get('share');
         const shareIdFromParam = urlParams.get('share_id');
+        const gistId = urlParams.get('gist'); // 新增Gist支持
         
         // 从路径中提取shareId (支持 /share/shareId 格式)
         const pathSegments = window.location.pathname.split('/');
@@ -3278,10 +3351,14 @@ class LiteratureManager {
         console.log('- Path segments:', pathSegments);
         console.log('- Share ID from path:', shareIdFromPath);
         console.log('- Share ID from param:', shareIdFromParam);
+        console.log('- Gist ID:', gistId);
         console.log('- Final share ID:', shareId);
         console.log('- Share param (old format):', shareParam);
         
-        if (shareId) {
+        if (gistId) {
+            console.log('📋 Loading shared papers from GitHub Gist:', gistId);
+            await this.loadSharedPapersFromGist(gistId);
+        } else if (shareId) {
             console.log('📋 Loading shared papers with ID:', shareId);
             // Supabase分享链接
             await this.loadSharedPapers(shareId);
@@ -3291,6 +3368,52 @@ class LiteratureManager {
             await this.loadSharedPapersFromUrl(shareParam);
         } else {
             console.log('⚠️ No share parameter found in URL');
+        }
+    }
+    
+    // 从GitHub Gist加载分享的论文
+    async loadSharedPapersFromGist(gistId) {
+        try {
+            this.showNotification('Loading shared papers...', 'info');
+            
+            const response = await fetch(`https://api.github.com/gists/${gistId}`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch gist: ${response.status}`);
+            }
+            
+            const gistData = await response.json();
+            const papersFile = gistData.files['papers.json'];
+            
+            if (!papersFile) {
+                throw new Error('Papers data not found in gist');
+            }
+            
+            const shareData = JSON.parse(papersFile.content);
+            this.papers = shareData.papers || [];
+            this.filteredPapers = [...this.papers];
+            
+            // 确保UI正确更新
+            this.updateStatistics();
+            this.initializeFilters();
+            this.applyFilters();
+            this.renderPapersGrid();
+            this.updatePagination();
+            
+            this.showNotification(`✅ 成功加载 ${this.papers.length} 篇分享的论文`, 'success');
+            
+            // 显示分享信息
+            if (shareData.metadata) {
+                setTimeout(() => {
+                    const sharedDate = new Date(shareData.metadata.shared_at).toLocaleDateString();
+                    this.showNotification(`📋 查看分享的论文集合 (分享于 ${sharedDate})`, 'info');
+                }, 2000);
+            }
+            
+            console.log('✅ Successfully loaded shared papers from Gist:', this.papers.length);
+            
+        } catch (error) {
+            console.error('❌ Error loading shared papers from Gist:', error);
+            this.showNotification('分享链接无效或已过期', 'error');
         }
     }
 
